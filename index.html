@@ -4311,16 +4311,40 @@
       const [selectedLeague, setSelectedLeague] = useState(null);
       const [showUpgradeModal, setShowUpgradeModal] = useState(false);
       const [selectedTier, setSelectedTier] = useState(null);
+      const [subscription, setSubscription] = useState(null); // { tier: "pro"|"elite", active: true }
 
       useEffect(() => {
         initFirebase();
-        const unsubscribe = fbAuth.onAuthStateChanged((u) => {
+        const unsubscribe = fbAuth.onAuthStateChanged(async (u) => {
           setUser(u);
           setCurrentView(u ? "dashboard" : "login");
+          // Check subscription status
+          if (u && u.email) {
+            const emailKey = u.email.replace(/\./g, ",").replace(/@/g, "_at_");
+            try {
+              const snap = await fbDb.ref(`subscriptions/${emailKey}`).once("value");
+              const sub = snap.val();
+              if (sub && sub.active) {
+                setSubscription(sub);
+              } else {
+                setSubscription(null);
+              }
+            } catch (e) {
+              console.warn("Sub check failed:", e);
+              setSubscription(null);
+            }
+          } else {
+            setSubscription(null);
+          }
           setLoading(false);
         });
         return unsubscribe;
       }, []);
+
+      const isPro = subscription?.tier === "pro" || subscription?.tier === "elite";
+      const isElite = subscription?.tier === "elite";
+      const FREE_LEAGUE_LIMIT = 1;
+      const FREE_PLAYER_LIMIT = 20;
 
       // ====================== LEAGUE MANAGEMENT ======================
       const [showCreateLeague, setShowCreateLeague] = useState(false);
@@ -4336,6 +4360,10 @@
 
       const createLeague = async () => {
         if (!leagueForm.name.trim()) return alert("Enter a league name");
+        if (!isPro && leagues.length >= FREE_LEAGUE_LIMIT) {
+          setShowUpgradeModal(true);
+          return alert("Free accounts are limited to " + FREE_LEAGUE_LIMIT + " league. Upgrade to Pro for unlimited leagues.");
+        }
         const leagueId = "league_" + Date.now();
         const payout = leagueForm.payoutSplit === "custom"
           ? leagueForm.customPayout.split("/").map(Number)
@@ -4443,7 +4471,15 @@
               <div style={S_DASH.logo}>POOLSIDE</div>
               <div style={{ display:"flex", gap:10, alignItems:"center" }}>
                 <span style={{ fontSize:"12px", color:"rgba(212,175,55,0.5)" }}>{user.email}</span>
-                <button onClick={() => setShowUpgradeModal(true)} style={{ ...S_DASH.btnOutline, borderColor:"rgba(212,175,55,0.5)" }}>Upgrade</button>
+                {subscription ? (
+                  <span style={{ padding:"4px 12px", borderRadius:4, fontSize:"11px", fontWeight:700, letterSpacing:1,
+                    background: isElite ? "rgba(255,100,100,0.15)" : "rgba(212,175,55,0.15)",
+                    color: isElite ? "#ff6666" : "#d4af37",
+                    border: `1px solid ${isElite ? "rgba(255,100,100,0.3)" : "rgba(212,175,55,0.3)"}`,
+                  }}>{subscription.tier.toUpperCase()}</span>
+                ) : (
+                  <button onClick={() => setShowUpgradeModal(true)} style={{ ...S_DASH.btnOutline, borderColor:"rgba(212,175,55,0.5)" }}>Upgrade</button>
+                )}
                 <button onClick={() => fbAuth.signOut()} style={S_DASH.btnDanger}>Logout</button>
               </div>
             </div>
