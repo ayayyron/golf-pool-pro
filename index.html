@@ -25,6 +25,95 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
+    // ====================== THEMES ======================
+    const THEMES = {
+      clubhouse: {
+        name: "Modern Clubhouse",
+        desc: "Navy & gold — clean, premium, excellent readability",
+        bg: "linear-gradient(175deg,#0a1729 0%,#0f172a 50%,#0a1729 100%)",
+        bgSolid: "#0a1729",
+        card: "rgba(255,255,255,0.04)",
+        cardBorder: "rgba(212,175,55,0.12)",
+        accent: "#d4af37",
+        accentLight: "rgba(212,175,55,0.7)",
+        accentFaint: "rgba(212,175,55,0.15)",
+        text: "#f0ead0",
+        textMuted: "rgba(255,255,255,0.5)",
+        textFaint: "rgba(255,255,255,0.3)",
+        red: "#ff4444",
+        green: "#44cc88",
+        navBg: "rgba(0,0,0,0.9)",
+      },
+      augusta: {
+        name: "Classic Augusta",
+        desc: "Forest green & gold — traditional Masters aesthetic",
+        bg: "linear-gradient(175deg,#0a3d1c 0%,#0d4a22 50%,#072e14 100%)",
+        bgSolid: "#0a3d1c",
+        card: "rgba(0,0,0,0.15)",
+        cardBorder: "rgba(200,184,106,0.1)",
+        accent: "#d4c87a",
+        accentLight: "rgba(200,184,106,0.7)",
+        accentFaint: "rgba(200,184,106,0.15)",
+        text: "#f0ead0",
+        textMuted: "rgba(200,184,106,0.6)",
+        textFaint: "rgba(200,184,106,0.3)",
+        red: "#ff4444",
+        green: "#44cc88",
+        navBg: "rgba(0,0,0,0.85)",
+      },
+      burgundy: {
+        name: "Burgundy Elite",
+        desc: "Deep burgundy & copper — bold, luxurious, corporate",
+        bg: "linear-gradient(175deg,#1a0a10 0%,#2d1018 50%,#1a0a10 100%)",
+        bgSolid: "#1a0a10",
+        card: "rgba(255,255,255,0.04)",
+        cardBorder: "rgba(205,127,50,0.15)",
+        accent: "#cd7f32",
+        accentLight: "rgba(205,127,50,0.7)",
+        accentFaint: "rgba(205,127,50,0.15)",
+        text: "#f5e6d3",
+        textMuted: "rgba(245,230,211,0.5)",
+        textFaint: "rgba(245,230,211,0.3)",
+        red: "#ff5555",
+        green: "#55cc88",
+        navBg: "rgba(26,10,16,0.95)",
+      },
+      slate: {
+        name: "Clean Slate",
+        desc: "Dark gray & cyan — modern fantasy sports look",
+        bg: "linear-gradient(175deg,#111827 0%,#1f2937 50%,#111827 100%)",
+        bgSolid: "#111827",
+        card: "rgba(255,255,255,0.05)",
+        cardBorder: "rgba(34,211,238,0.12)",
+        accent: "#22d3ee",
+        accentLight: "rgba(34,211,238,0.7)",
+        accentFaint: "rgba(34,211,238,0.15)",
+        text: "#f1f5f9",
+        textMuted: "rgba(241,245,249,0.5)",
+        textFaint: "rgba(241,245,249,0.3)",
+        red: "#f87171",
+        green: "#4ade80",
+        navBg: "rgba(17,24,39,0.95)",
+      },
+      turf: {
+        name: "Vibrant Turf",
+        desc: "Rich green & bright gold — energetic, fresh",
+        bg: "linear-gradient(175deg,#064e3b 0%,#065f46 50%,#064e3b 100%)",
+        bgSolid: "#064e3b",
+        card: "rgba(0,0,0,0.2)",
+        cardBorder: "rgba(250,204,21,0.15)",
+        accent: "#facc15",
+        accentLight: "rgba(250,204,21,0.7)",
+        accentFaint: "rgba(250,204,21,0.15)",
+        text: "#f0fdf4",
+        textMuted: "rgba(240,253,244,0.6)",
+        textFaint: "rgba(240,253,244,0.3)",
+        red: "#fb7185",
+        green: "#34d399",
+        navBg: "rgba(6,78,59,0.95)",
+      },
+    };
+
     // ====================== FIREBASE ======================
     const FIREBASE_CONFIG = {
       apiKey: "AIzaSyA72ne-CEQvriO1_5yDy2Ih8Y6aRko1p8s",
@@ -4244,6 +4333,7 @@
         venmoUsername: "", maxPlayers: 20,
         lockDate: "", lockTime: "",
         tiers: "4", picksPerTeam: 10, bestOf: 5,
+        theme: "clubhouse", logoUrl: "",
       });
 
       const createLeague = async () => {
@@ -4269,6 +4359,8 @@
           createdAt: Date.now(),
           ownerId: user.uid,
           ownerEmail: user.email,
+          theme: leagueForm.theme || "clubhouse",
+          logoUrl: leagueForm.logoUrl || "",
         };
         await fbDb.ref(`users/${user.uid}/leagues/${leagueId}`).set(leagueData);
         // Also store in global leagues index for discoverability later
@@ -4277,7 +4369,7 @@
           sport: leagueData.sport, ownerId: user.uid, createdAt: Date.now(),
         });
         setShowCreateLeague(false);
-        setLeagueForm({ name: "", tournament: "", sport: "golf", entryFee: 20, adminFee: 0, payoutSplit: "60/30/10", customPayout: "", venmoUsername: "", maxPlayers: 20, lockDate: "", lockTime: "", tiers: "4", picksPerTeam: 10, bestOf: 5 });
+        setLeagueForm({ name: "", tournament: "", sport: "golf", entryFee: 20, adminFee: 0, payoutSplit: "60/30/10", customPayout: "", venmoUsername: "", maxPlayers: 20, lockDate: "", lockTime: "", tiers: "4", picksPerTeam: 10, bestOf: 5, theme: "clubhouse", logoUrl: "" });
         loadLeagues();
       };
 
@@ -4306,17 +4398,23 @@
       };
 
       // ====================== STRIPE ======================
+      const [billingCycle, setBillingCycle] = useState("monthly");
+
+      const STRIPE_LINKS = {
+        pro: {
+          monthly: "https://buy.stripe.com/test_7sY8wPbCWgjvbM7dsg4gg00",
+          yearly: "https://buy.stripe.com/test_aFa4gz9uOaZbg2nag44gg02",
+        },
+        elite: {
+          monthly: "https://buy.stripe.com/test_eVqeVd8qKgjv03pgEs4gg01",
+          yearly: "https://buy.stripe.com/test_7sYeVd22m4ANeYj3RG4gg03",
+        },
+      };
+
       const handleStripeUpgrade = (tier) => {
-        // For now, redirect to a Stripe payment link (we'll create these in Stripe dashboard)
-        // In production, this would create a Checkout Session via Netlify Function
-        const urls = {
-          pro: "https://buy.stripe.com/test_PLACEHOLDER_PRO",
-          elite: "https://buy.stripe.com/test_PLACEHOLDER_ELITE",
-        };
-        if (urls[tier] && !urls[tier].includes("PLACEHOLDER")) {
-          window.open(urls[tier], "_blank");
-        } else {
-          alert(`Stripe payment links not configured yet.\n\nFor now, pay via Venmo to @Aaron-Sandifer:\n  Pro: $19/month\n  Elite: $39/month\n\nYou'll be upgraded within 24 hours.`);
+        const url = STRIPE_LINKS[tier]?.[billingCycle];
+        if (url) {
+          window.open(url, "_blank");
         }
         setShowUpgradeModal(false);
       };
@@ -4367,14 +4465,17 @@
                 <p style={{ textAlign:"center", color:"rgba(255,255,255,0.3)", fontSize:"14px", padding:"40px" }}>
                   No leagues yet. Create one to get started.
                 </p>
-              ) : leagues.map(l => (
-                <div key={l.id} style={{ ...S_DASH.card, borderLeft:"4px solid #d4af37" }}>
+              ) : leagues.map(l => {
+                const t = THEMES[l.theme] || THEMES.clubhouse;
+                return (
+                <div key={l.id} style={{ ...S_DASH.card, borderLeft:`4px solid ${t.accent}` }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:10 }}>
                     <div>
-                      <h3 style={{ color:"#d4af37", fontSize:"18px", marginBottom:"4px" }}>{l.name}</h3>
+                      <h3 style={{ color:t.accent, fontSize:"18px", marginBottom:"4px" }}>{l.name}</h3>
                       <p style={{ fontSize:"12px", color:"rgba(255,255,255,0.4)" }}>
                         {l.tournament || "No tournament set"} · {"$" + (l.entryFee || 0)} entry
                         {l.venmoUsername && (" · @" + l.venmoUsername)}
+                        <span style={{ marginLeft:8, padding:"2px 8px", borderRadius:4, fontSize:"10px", background:t.accentFaint, color:t.accentLight }}>{t.name}</span>
                       </p>
                     </div>
                     <div style={{ display:"flex", gap:8 }}>
@@ -4383,7 +4484,8 @@
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* ── CREATE LEAGUE MODAL ────────────────────────── */}
@@ -4454,6 +4556,24 @@
                   <label style={S_DASH.label}>Registration Lock Date</label>
                   <input style={{ ...S_DASH.input, colorScheme:"dark" }} type="datetime-local" value={leagueForm.lockDate} onChange={e => setLeagueForm({...leagueForm, lockDate: e.target.value})} />
 
+                  <label style={S_DASH.label}>Theme</label>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
+                    {Object.entries(THEMES).map(([key, t]) => (
+                      <div key={key} onClick={() => setLeagueForm({...leagueForm, theme: key})}
+                        style={{
+                          padding:"12px", borderRadius:"8px", cursor:"pointer",
+                          background: t.bg, border: leagueForm.theme === key ? `2px solid ${t.accent}` : "2px solid transparent",
+                          transition:"all 0.15s",
+                        }}>
+                        <div style={{ fontSize:"13px", fontWeight:600, color: t.accent }}>{t.name}</div>
+                        <div style={{ fontSize:"10px", color: t.textMuted, marginTop:2 }}>{t.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <label style={S_DASH.label}>Logo URL (optional)</label>
+                  <input style={S_DASH.input} value={leagueForm.logoUrl || ""} onChange={e => setLeagueForm({...leagueForm, logoUrl: e.target.value})} placeholder="https://your-logo.com/logo.png" />
+
                   <div style={{ display:"flex", gap:10, marginTop:"20px" }}>
                     <button onClick={createLeague} style={{ ...S_DASH.btn, flex:1 }}>Create League</button>
                     <button onClick={() => setShowCreateLeague(false)} style={{ ...S_DASH.btnOutline, flex:0 }}>Cancel</button>
@@ -4467,29 +4587,62 @@
               <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.95)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000 }}>
                 <div style={{ background:"#0f172a", padding:"40px", borderRadius:"14px", maxWidth:"520px", width:"100%", textAlign:"center", border:"1px solid rgba(212,175,55,0.2)" }}>
                   <h2 style={{ color:"#d4af37", letterSpacing:2, marginBottom:"8px" }}>UPGRADE POOLSIDE</h2>
-                  <p style={{ color:"rgba(255,255,255,0.4)", fontSize:"13px", marginBottom:"24px" }}>Unlock unlimited players and premium features</p>
+                  <p style={{ color:"rgba(255,255,255,0.4)", fontSize:"13px", marginBottom:"20px" }}>Unlock unlimited players and premium features</p>
 
-                  <div onClick={() => handleStripeUpgrade("pro")} style={{ cursor:"pointer", background:"rgba(212,175,55,0.06)", padding:"20px", margin:"12px 0", borderRadius:"10px", border:"1px solid rgba(212,175,55,0.3)", textAlign:"left" }}>
+                  {/* Billing cycle toggle */}
+                  <div style={{ display:"inline-flex", background:"rgba(255,255,255,0.06)", borderRadius:"8px", padding:"3px", marginBottom:"24px", border:"1px solid rgba(212,175,55,0.1)" }}>
+                    <button onClick={() => setBillingCycle("monthly")} style={{
+                      padding:"8px 20px", borderRadius:"6px", border:"none", cursor:"pointer", fontSize:"13px", fontWeight:600,
+                      background: billingCycle === "monthly" ? "#d4af37" : "transparent",
+                      color: billingCycle === "monthly" ? "#0a1729" : "rgba(255,255,255,0.5)",
+                    }}>Monthly</button>
+                    <button onClick={() => setBillingCycle("yearly")} style={{
+                      padding:"8px 20px", borderRadius:"6px", border:"none", cursor:"pointer", fontSize:"13px", fontWeight:600,
+                      background: billingCycle === "yearly" ? "#d4af37" : "transparent",
+                      color: billingCycle === "yearly" ? "#0a1729" : "rgba(255,255,255,0.5)",
+                    }}>
+                      Annual
+                      <span style={{ fontSize:"10px", marginLeft:6, color: billingCycle === "yearly" ? "#0a1729" : "#4ade80", fontWeight:700 }}>Save 20%</span>
+                    </button>
+                  </div>
+
+                  {/* Pro tier */}
+                  <div onClick={() => handleStripeUpgrade("pro")} style={{ cursor:"pointer", background:"rgba(212,175,55,0.06)", padding:"20px", margin:"12px 0", borderRadius:"10px", border:"1px solid rgba(212,175,55,0.3)", textAlign:"left", transition:"all 0.15s" }}>
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                      <h3 style={{ color:"#d4af37" }}>Pro</h3>
-                      <span style={{ color:"#d4af37", fontSize:"18px", fontWeight:700 }}>$19<span style={{ fontSize:"12px", fontWeight:400 }}>/mo</span></span>
+                      <h3 style={{ color:"#d4af37", fontSize:"18px" }}>Pro</h3>
+                      <div style={{ textAlign:"right" }}>
+                        <span style={{ color:"#d4af37", fontSize:"22px", fontWeight:700 }}>
+                          {"$" + (billingCycle === "monthly" ? "19" : "149")}
+                        </span>
+                        <span style={{ color:"rgba(212,175,55,0.5)", fontSize:"12px" }}>
+                          /{billingCycle === "monthly" ? "mo" : "yr"}
+                        </span>
+                      </div>
                     </div>
                     <p style={{ color:"rgba(255,255,255,0.5)", fontSize:"12px", marginTop:"8px", lineHeight:1.6 }}>
-                      Unlimited players · Custom bonuses · Advanced stats · Weather & news ticker · CSV exports · Priority support
+                      Unlimited players · Custom bonuses · Advanced stats · Weather &amp; news ticker · CSV exports · Priority support
                     </p>
                   </div>
 
-                  <div onClick={() => handleStripeUpgrade("elite")} style={{ cursor:"pointer", background:"rgba(255,100,100,0.04)", padding:"20px", margin:"12px 0", borderRadius:"10px", border:"1px solid rgba(255,100,100,0.2)", textAlign:"left" }}>
+                  {/* Elite tier */}
+                  <div onClick={() => handleStripeUpgrade("elite")} style={{ cursor:"pointer", background:"rgba(255,100,100,0.04)", padding:"20px", margin:"12px 0", borderRadius:"10px", border:"1px solid rgba(255,100,100,0.2)", textAlign:"left", transition:"all 0.15s" }}>
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                      <h3 style={{ color:"#ff6666" }}>Elite</h3>
-                      <span style={{ color:"#ff6666", fontSize:"18px", fontWeight:700 }}>$39<span style={{ fontSize:"12px", fontWeight:400 }}>/mo</span></span>
+                      <h3 style={{ color:"#ff6666", fontSize:"18px" }}>Elite</h3>
+                      <div style={{ textAlign:"right" }}>
+                        <span style={{ color:"#ff6666", fontSize:"22px", fontWeight:700 }}>
+                          {"$" + (billingCycle === "monthly" ? "39" : "299")}
+                        </span>
+                        <span style={{ color:"rgba(255,100,100,0.5)", fontSize:"12px" }}>
+                          /{billingCycle === "monthly" ? "mo" : "yr"}
+                        </span>
+                      </div>
                     </div>
                     <p style={{ color:"rgba(255,255,255,0.5)", fontSize:"12px", marginTop:"8px", lineHeight:1.6 }}>
-                      Everything in Pro · Prop challenges · Season-long tracking · Custom themes & logo · White-label option
+                      Everything in Pro · Prop challenges · Season-long tracking · Custom themes &amp; logo · White-label option
                     </p>
                   </div>
 
-                  <button onClick={() => setShowUpgradeModal(false)} style={{ marginTop:"16px", padding:"10px 28px", background:"transparent", border:"1px solid rgba(255,255,255,0.2)", color:"rgba(255,255,255,0.5)", borderRadius:"6px", cursor:"pointer" }}>
+                  <button onClick={() => setShowUpgradeModal(false)} style={{ marginTop:"16px", padding:"10px 28px", background:"transparent", border:"1px solid rgba(255,255,255,0.2)", color:"rgba(255,255,255,0.5)", borderRadius:"6px", cursor:"pointer", fontSize:"13px" }}>
                     Maybe Later
                   </button>
                 </div>
