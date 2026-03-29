@@ -1199,7 +1199,9 @@
       );
     }
     
-    function GolfPool() {
+    function GolfPool({ leagueTheme }) {
+      const T = THEMES[leagueTheme] || THEMES.clubhouse;
+      const S = useMemo(() => makeStyles(T), [leagueTheme]);
       // ── Core state ────────────────────────────────────────────
       const [view, setView] = useState("leaderboard");
       const [teams, setTeams] = useState({});
@@ -4113,17 +4115,17 @@
     // ═══════════════════════════════════════════════════════════════
     // STYLES
     // ═══════════════════════════════════════════════════════════════
-    const S = {
+    const makeStyles = (T) => ({
       root: {
         minHeight: "100vh",
-        background: "linear-gradient(175deg,#0a3d1c 0%,#0d4a22 25%,#0b3e1b 50%,#072e14 100%)",
+        background: T.bg,
         fontFamily: "'Playfair Display',Georgia,serif",
-        color: "#f0ead0",
+        color: T.text,
         position: "relative",
       },
       overlay: {
         position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-        backgroundImage: "radial-gradient(ellipse at 30% 20%,rgba(200,184,106,0.04) 0%,transparent 60%)",
+        backgroundImage: `radial-gradient(ellipse at 30% 20%,${T.accentFaint} 0%,transparent 60%)`,
         pointerEvents: "none", zIndex: 0,
       },
       wrap: { position: "relative", zIndex: 1, maxWidth: 1400, margin: "0 auto", padding: "0 20px 40px" },
@@ -4131,64 +4133,60 @@
       // Ticker
       ticker: {
         overflow: "hidden", background: "rgba(0,0,0,0.3)",
-        borderBottom: "1px solid rgba(200,184,106,0.1)",
+        borderBottom: `1px solid ${T.accentFaint}`,
         padding: "8px 0", whiteSpace: "nowrap",
       },
-      tickerTrack: {
-        display: "inline-block",
-        animation: "tickerScroll 60s linear infinite",
-        paddingLeft: "100%",
-      },
-      tickerItem: { fontSize: 13, color: "rgba(200,184,106,0.7)" },
-      tickerLink: { color: "rgba(200,184,106,0.8)", textDecoration: "none" },
-      tickerSep: { margin: "0 16px", color: "rgba(200,184,106,0.15)" },
+      tickerTrack: { display: "inline-block", animation: "tickerScroll 60s linear infinite", paddingLeft: "100%" },
+      tickerItem: { fontSize: 13, color: T.accentLight },
+      tickerLink: { color: T.accentLight, textDecoration: "none" },
+      tickerSep: { margin: "0 16px", color: T.accentFaint },
     
       // Header
-      hdr: { textAlign: "center", padding: "20px 0 12px", borderBottom: "2px solid rgba(200,184,106,0.2)" },
+      hdr: { textAlign: "center", padding: "20px 0 12px", borderBottom: `2px solid ${T.accentFaint}` },
       hdrRow: { display: "flex", alignItems: "center", justifyContent: "center", gap: 14 },
       title: {
-        fontSize: 26, fontWeight: 700, letterSpacing: 5, color: "#d4c87a",
+        fontSize: 26, fontWeight: 700, letterSpacing: 5, color: T.accent,
         textTransform: "uppercase", margin: 0, lineHeight: 1.2,
-        textShadow: "0 2px 20px rgba(200,184,106,0.15)",
+        textShadow: `0 2px 20px ${T.accentFaint}`,
       },
       sub: {
-        fontSize: 12, letterSpacing: 3, color: "rgba(200,184,106,0.75)",
+        fontSize: 12, letterSpacing: 3, color: T.accentLight,
         textTransform: "uppercase", margin: "3px 0 0", fontStyle: "italic",
       },
       statusBar: {
         display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-        marginTop: 8, fontSize: 11, color: "rgba(200,184,106,0.7)", letterSpacing: 1, flexWrap: "wrap",
+        marginTop: 8, fontSize: 11, color: T.accentLight, letterSpacing: 1, flexWrap: "wrap",
       },
       dot: { width: 6, height: 6, borderRadius: "50%", display: "inline-block" },
       badge: {
-        padding: "2px 7px", background: "rgba(200,184,106,0.07)",
-        border: "1px solid rgba(200,184,106,0.12)", borderRadius: 3,
+        padding: "2px 7px", background: T.accentFaint,
+        border: `1px solid ${T.cardBorder}`, borderRadius: 3,
         fontSize: 10, letterSpacing: 1, textTransform: "uppercase",
       },
     
       // Nav
-      nav: { display: "flex", justifyContent: "center", borderBottom: "1px solid rgba(200,184,106,0.1)", overflowX: "auto", WebkitOverflowScrolling: "touch" },
+      nav: { display: "flex", justifyContent: "center", borderBottom: `1px solid ${T.accentFaint}`, overflowX: "auto", WebkitOverflowScrolling: "touch" },
       nb: {
         padding: "11px 12px", border: "none", cursor: "pointer",
-        background: "transparent", color: "rgba(200,184,106,0.7)",
+        background: "transparent", color: T.accentLight,
         borderBottom: "2px solid transparent", fontSize: 13,
         letterSpacing: 1.5, textTransform: "uppercase", whiteSpace: "nowrap",
         fontFamily: "'Playfair Display',Georgia,serif", transition: "all 0.2s",
         flex: "0 0 auto",
       },
-      nba: { color: "#d4c87a", background: "rgba(200,184,106,0.05)", borderBottomColor: "#d4c87a" },
+      nba: { color: T.accent, background: T.accentFaint, borderBottomColor: T.accent },
     
       // Board
       boardHdr: {
         display: "flex", padding: "10px 8px", fontSize: 11, letterSpacing: 2,
-        textTransform: "uppercase", color: "rgba(200,184,106,0.75)", fontWeight: 600,
-        borderBottom: "2px solid rgba(200,184,106,0.15)", background: "rgba(0,0,0,0.25)",
+        textTransform: "uppercase", color: T.accentLight, fontWeight: 600,
+        borderBottom: `2px solid ${T.accentFaint}`, background: "rgba(0,0,0,0.25)",
       },
       bhc: { textAlign: "center" },
       boardRow: {
         display: "flex", alignItems: "center", padding: "11px 8px",
         cursor: "pointer", transition: "background 0.15s",
-        borderBottom: "1px solid rgba(200,184,106,0.05)",
+        borderBottom: `1px solid ${T.accentFaint}`,
       },
       bc: { textAlign: "center", fontSize: 17 },
       sc: { textAlign: "center", fontFamily: "'IBM Plex Mono','Courier New',monospace" },
@@ -4196,115 +4194,115 @@
       // Expanded panel
       xpanel: {
         padding: "0 8px 10px", animation: "fadeIn 0.25s ease",
-        background: "rgba(0,0,0,0.1)", borderBottom: "1px solid rgba(200,184,106,0.08)",
+        background: "rgba(0,0,0,0.1)", borderBottom: `1px solid ${T.accentFaint}`,
       },
       gHdr: {
         display: "flex", padding: "8px 0 4px", fontSize: 10, letterSpacing: 1.5,
-        textTransform: "uppercase", color: "rgba(200,184,106,0.7)", fontWeight: 600,
-        borderBottom: "1px solid rgba(200,184,106,0.08)",
+        textTransform: "uppercase", color: T.accentLight, fontWeight: 600,
+        borderBottom: `1px solid ${T.accentFaint}`,
       },
       gRow: { display: "flex", alignItems: "center", padding: "6px 0", fontSize: 14 },
       gTotal: {
         display: "flex", alignItems: "center", padding: "8px 0",
-        borderTop: "1px solid rgba(200,184,106,0.1)",
+        borderTop: `1px solid ${T.accentFaint}`,
       },
     
       // Empty state
       empty: { textAlign: "center", padding: "60px 20px" },
-      emptyMsg: { textAlign: "center", color: "rgba(200,184,106,0.7)", padding: 40 },
+      emptyMsg: { textAlign: "center", color: T.accentLight, padding: 40 },
     
       // Stats
       statCard: {
-        background: "rgba(0,0,0,0.12)", borderRadius: 7, padding: 16,
-        border: "1px solid rgba(200,184,106,0.06)", marginBottom: 10,
+        background: T.card, borderRadius: 7, padding: 16,
+        border: `1px solid ${T.cardBorder}`, marginBottom: 10,
       },
       statLabel: {
         fontSize: 12, letterSpacing: 2, textTransform: "uppercase",
-        color: "rgba(200,184,106,0.75)", marginBottom: 8,
+        color: T.accentLight, marginBottom: 8,
       },
     
       // Section title
       sectionTitle: {
-        color: "#d4c87a", fontSize: 17, letterSpacing: 3, textTransform: "uppercase",
+        color: T.accent, fontSize: 17, letterSpacing: 3, textTransform: "uppercase",
         fontWeight: 400, margin: "0 0 14px", textAlign: "center",
       },
     
       // Form
       formLabel: {
         display: "block", fontSize: 11, letterSpacing: 1.5,
-        color: "rgba(200,184,106,0.75)", textTransform: "uppercase", marginBottom: 3,
+        color: T.accentLight, textTransform: "uppercase", marginBottom: 3,
       },
       formInput: {
         width: "100%", padding: "9px 11px", background: "rgba(0,0,0,0.25)",
-        border: "1px solid rgba(200,184,106,0.12)", borderRadius: 4,
-        color: "#f0ead0", fontSize: 17, fontFamily: "'Playfair Display',Georgia,serif",
+        border: `1px solid ${T.cardBorder}`, borderRadius: 4,
+        color: T.text, fontSize: 17, fontFamily: "'Playfair Display',Georgia,serif",
       },
       ok: {
         padding: "9px 14px", background: "rgba(68,204,68,0.08)",
         border: "1px solid rgba(68,204,68,0.25)", borderRadius: 5,
-        color: "#4c4", fontSize: 14, marginBottom: 14, textAlign: "center",
+        color: T.green, fontSize: 14, marginBottom: 14, textAlign: "center",
       },
       errBox: {
         padding: "9px 14px", background: "rgba(204,68,68,0.08)",
         border: "1px solid rgba(204,68,68,0.25)", borderRadius: 5,
-        color: "#c66", fontSize: 14, marginBottom: 14, textAlign: "center",
+        color: T.red, fontSize: 14, marginBottom: 14, textAlign: "center",
       },
       tierBox: {
-        marginBottom: 16, background: "rgba(0,0,0,0.12)", borderRadius: 7,
-        border: "1px solid rgba(200,184,106,0.06)", padding: 14,
+        marginBottom: 16, background: T.card, borderRadius: 7,
+        border: `1px solid ${T.cardBorder}`, padding: 14,
       },
       tierSearch: {
         width: "100%", padding: "7px 10px", background: "rgba(0,0,0,0.18)",
-        border: "1px solid rgba(200,184,106,0.08)", borderRadius: 3,
-        color: "#f0ead0", fontSize: 13, marginBottom: 8,
+        border: `1px solid ${T.cardBorder}`, borderRadius: 3,
+        color: T.text, fontSize: 13, marginBottom: 8,
         fontFamily: "'Playfair Display',Georgia,serif",
       },
       chip: {
         display: "flex", alignItems: "center", padding: "7px 10px",
         border: "1px solid", borderRadius: 4, fontSize: 13,
         fontFamily: "'Playfair Display',Georgia,serif", transition: "all 0.15s",
-        minHeight: 36, // touch-friendly minimum
+        minHeight: 36,
       },
       pickSummary: {
-        background: "rgba(200,184,106,0.03)", border: "1px solid rgba(200,184,106,0.08)",
+        background: T.accentFaint, border: `1px solid ${T.cardBorder}`,
         borderRadius: 7, padding: 14, marginTop: 16, marginBottom: 14,
       },
       primaryBtn: {
         display: "block", width: "100%", padding: "12px",
-        background: "rgba(200,184,106,0.1)", border: "2px solid rgba(200,184,106,0.25)",
-        borderRadius: 5, color: "#d4c87a", fontSize: 17, letterSpacing: 3,
+        background: T.accentFaint, border: `2px solid ${T.accent}`,
+        borderRadius: 5, color: T.accent, fontSize: 17, letterSpacing: 3,
         textTransform: "uppercase", cursor: "pointer",
         fontFamily: "'Playfair Display',Georgia,serif", fontWeight: 600, transition: "all 0.2s",
       },
     
       // Rules
       ruleBox: {
-        marginBottom: 20, background: "rgba(0,0,0,0.1)", borderRadius: 7,
-        padding: 16, border: "1px solid rgba(200,184,106,0.05)",
+        marginBottom: 20, background: T.card, borderRadius: 7,
+        padding: 16, border: `1px solid ${T.cardBorder}`,
       },
       ruleTitle: {
-        color: "#d4c87a", fontSize: 13, letterSpacing: 2,
+        color: T.accent, fontSize: 13, letterSpacing: 2,
         textTransform: "uppercase", fontWeight: 400, marginBottom: 6,
       },
-      ruleText: { color: "rgba(200,184,106,0.65)", fontSize: 14, lineHeight: 1.7, margin: "0 0 4px" },
+      ruleText: { color: T.textMuted, fontSize: 14, lineHeight: 1.7, margin: "0 0 4px" },
     
       // Admin
       adminBox: {
-        background: "rgba(0,0,0,0.12)", borderRadius: 7, padding: 14,
-        border: "1px solid rgba(200,184,106,0.06)",
+        background: T.card, borderRadius: 7, padding: 14,
+        border: `1px solid ${T.cardBorder}`,
       },
       smallInput: {
         width: 46, padding: "3px 5px", textAlign: "center",
-        background: "rgba(0,0,0,0.25)", border: "1px solid rgba(200,184,106,0.08)",
-        borderRadius: 3, color: "#f0ead0", fontFamily: "monospace", fontSize: 13,
+        background: "rgba(0,0,0,0.25)", border: `1px solid ${T.cardBorder}`,
+        borderRadius: 3, color: T.text, fontFamily: "monospace", fontSize: 13,
       },
     
       // Footer
       footer: {
         textAlign: "center", padding: "28px 0 8px", fontSize: 10,
-        letterSpacing: 3, color: "rgba(200,184,106,0.18)", textTransform: "uppercase",
+        letterSpacing: 3, color: T.textFaint, textTransform: "uppercase",
       },
-    };
+    });
     function PoolsideApp() {
       const [user, setUser] = useState(null);
       const [loading, setLoading] = useState(true);
@@ -4571,8 +4569,27 @@
                     ))}
                   </div>
 
-                  <label style={S_DASH.label}>Logo URL (optional)</label>
-                  <input style={S_DASH.input} value={leagueForm.logoUrl || ""} onChange={e => setLeagueForm({...leagueForm, logoUrl: e.target.value})} placeholder="https://your-logo.com/logo.png" />
+                  <label style={S_DASH.label}>Logo (optional)</label>
+                  <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+                    <input style={{ ...S_DASH.input, flex:1, marginBottom:0 }} value={leagueForm.logoUrl || ""} onChange={e => setLeagueForm({...leagueForm, logoUrl: e.target.value})} placeholder="Paste image URL..." />
+                    <label style={{ ...S_DASH.btnOutline, display:"flex", alignItems:"center", cursor:"pointer", whiteSpace:"nowrap", padding:"8px 14px" }}>
+                      Upload
+                      <input type="file" accept="image/*" style={{ display:"none" }} onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 500000) { alert("Image must be under 500KB"); return; }
+                        const reader = new FileReader();
+                        reader.onload = () => setLeagueForm({...leagueForm, logoUrl: reader.result});
+                        reader.readAsDataURL(file);
+                      }} />
+                    </label>
+                  </div>
+                  {leagueForm.logoUrl && (
+                    <div style={{ marginBottom:10, textAlign:"center" }}>
+                      <img src={leagueForm.logoUrl} alt="Preview" style={{ maxHeight:48, borderRadius:4, border:`1px solid rgba(212,175,55,0.2)` }} />
+                      <button onClick={() => setLeagueForm({...leagueForm, logoUrl:""})} style={{ marginLeft:8, fontSize:"11px", color:"#c44", background:"none", border:"none", cursor:"pointer" }}>Remove</button>
+                    </div>
+                  )}
 
                   <div style={{ display:"flex", gap:10, marginTop:"20px" }}>
                     <button onClick={createLeague} style={{ ...S_DASH.btn, flex:1 }}>Create League</button>
@@ -4654,22 +4671,24 @@
 
       // ====================== YOUR ORIGINAL FULL UI ======================
       if (currentView === "pool" && selectedLeague) {
+        const T = THEMES[selectedLeague.theme] || THEMES.clubhouse;
         return (
-          <div>
-            <button 
-              onClick={() => setCurrentView("dashboard")} 
-              style={{position:"fixed", top:10, left:10, zIndex:1000, padding:"8px 16px", background:"#c44", color:"white", border:"none", borderRadius:"4px"}}
-            >
-              ← Back to My Leagues
-            </button>
+          <div style={{ minHeight:"100vh", background: T.bg, fontFamily:"'Playfair Display',Georgia,serif" }}>
+            <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:1000, background: T.navBg, padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:`1px solid ${T.accentFaint}` }}>
+              <button 
+                onClick={() => setCurrentView("dashboard")} 
+                style={{ padding:"6px 14px", background:"transparent", border:`1px solid ${T.accentFaint}`, color:T.accent, borderRadius:"4px", cursor:"pointer", fontSize:"12px" }}
+              >
+                ← My Leagues
+              </button>
+              <span style={{ color:T.accent, fontSize:"14px", fontWeight:700, letterSpacing:2 }}>{selectedLeague.name}</span>
+              {selectedLeague.logoUrl && (
+                <img src={selectedLeague.logoUrl} alt="Logo" style={{ height:28, borderRadius:4 }} />
+              )}
+            </div>
             
-            <div style={{paddingTop: "70px"}}>
-              <h2 style={{textAlign: "center", color: "#d4c87a", marginBottom: "20px"}}>
-                {selectedLeague.name}
-              </h2>
-              
-              {/* YOUR ORIGINAL FULL GOLF POOL UI IS LOADED HERE */}
-              <GolfPool />
+            <div style={{ paddingTop:"50px" }}>
+              <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} />
             </div>
           </div>
         );
