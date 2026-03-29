@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Golf Pool Pro</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%23006747'/%3E%3Cpath d='M28 14 L28 48' stroke='%23FFD700' stroke-width='2'/%3E%3Cpath d='M28 14 L42 20 L28 26 Z' fill='%23FFD700'/%3E%3Cellipse cx='32' cy='50' rx='12' ry='3' fill='%23006747' stroke='%23FFD700' stroke-width='1'/%3E%3C/svg%3E">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a2e1a; font-family: 'Georgia', serif; }
+    #root { min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyBy2uMZCWG9Hu0rP4uABXC0qjCdxWom_Ko",
+      authDomain: "golf-pool-1ceb9.firebaseapp.com",
+      databaseURL: "https://golf-pool-1ceb9-default-rtdb.firebaseio.com",
+      projectId: "golf-pool-1ceb9",
+      storageBucket: "golf-pool-1ceb9.firebasestorage.app",
+      messagingSenderId: "403029623453",
+      appId: "1:403029623453:web:57119dbbc0cb6568940a74",
+    };
+
+    let fbApp = null;
+    let fbDb = null;
+    let fbAuth = null;
+
+    function initFirebase() {
+      if (fbApp) return true;
+      try {
+        fbApp = firebase.initializeApp(FIREBASE_CONFIG);
+        fbDb = firebase.database();
+        fbAuth = firebase.auth();
+        return true;
+      } catch (e) {
+        console.error("Firebase init failed:", e);
+        return false;
+      }
+    }
+
+    function GolfPoolPro() {
+      const [user, setUser] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [view, setView] = useState("login");
+      const [leagues, setLeagues] = useState([]);
+      const [newLeagueName, setNewLeagueName] = useState("");
+      const [showCreateForm, setShowCreateForm] = useState(false);
+
+      useEffect(() => {
+        initFirebase();
+
+        const unsubscribe = fbAuth.onAuthStateChanged((currentUser) => {
+          setUser(currentUser);
+          setView(currentUser ? "dashboard" : "login");
+          setLoading(false);
+        });
+
+        return () => unsubscribe();
+      }, []);
+
+      const handleLogout = () => fbAuth.signOut();
+
+      const createLeague = async () => {
+        if (!newLeagueName.trim()) return;
+        if (!user) return;
+
+        const leagueId = "league_" + Date.now();
+        const leagueData = {
+          name: newLeagueName.trim(),
+          createdAt: Date.now(),
+          owner: user.uid,
+          tournament: "Masters 2026",   // default for now
+          playerLimit: 20,              // free tier limit
+        };
+
+        try {
+          await fbDb.ref(`users/${user.uid}/leagues/${leagueId}`).set(leagueData);
+          setNewLeagueName("");
+          setShowCreateForm(false);
+          alert("League created successfully!");
+          // Refresh leagues list
+          loadLeagues();
+        } catch (e) {
+          alert("Failed to create league: " + e.message);
+        }
+      };
+
+      const loadLeagues = () => {
+        if (!user) return;
+        fbDb.ref(`users/${user.uid}/leagues`).once("value", (snap) => {
+          const data = snap.val() || {};
+          setLeagues(Object.entries(data).map(([id, l]) => ({id, ...l})));
+        });
+      };
+
+      useEffect(() => {
+        if (user && view === "dashboard") {
+          loadLeagues();
+        }
+      }, [user, view]);
+
+      if (loading) {
+        return <div style={{padding: "120px", textAlign: "center", color: "#d4c87a"}}>Loading...</div>;
+      }
+
+      if (view === "login" || !user) {
+        return <LoginScreen />;
+      }
+
+      return (
+        <div style={{minHeight: "100vh", background: "linear-gradient(175deg,#0a3d1c 0%,#0d4a22 100%)", color: "#f0ead0"}}>
+          {/* Top Bar */}
+          <div style={{position: "fixed", top: 0, left: 0, right: 0, background: "rgba(0,0,0,0.8)", padding: "12px 25px", display: "flex", justifyContent: "space-between", zIndex: 100}}>
+            <div style={{fontSize: "22px", color: "#d4c87a", fontWeight: "600"}}>GOLF POOL PRO</div>
+            <div>
+              <span style={{marginRight: "20px"}}>{user.email}</span>
+              <button onClick={handleLogout} style={{padding: "6px 14px", background: "#c44", color: "white", border: "none", borderRadius: "4px"}}>Logout</button>
+            </div>
+          </div>
+
+          <div style={{padding: "90px 30px 40px"}}>
+            <h1 style={{textAlign: "center", color: "#d4c87a", marginBottom: "30px"}}>My Leagues</h1>
+
+            <div style={{textAlign: "center", marginBottom: "40px"}}>
+              <button 
+                onClick={() => setShowCreateForm(!showCreateForm)}
+                style={{padding: "12px 28px", background: "#d4c87a", color: "#0a3d1c", border: "none", borderRadius: "8px", fontSize: "17px", fontWeight: "600", cursor: "pointer"}}
+              >
+                + Create New League
+              </button>
+            </div>
+
+            {showCreateForm && (
+              <div style={{maxWidth: "500px", margin: "0 auto 40px", background: "rgba(0,0,0,0.4)", padding: "25px", borderRadius: "10px"}}>
+                <input 
+                  type="text" 
+                  placeholder="League Name (e.g. Masters 2026 Pool)"
+                  value={newLeagueName}
+                  onChange={(e) => setNewLeagueName(e.target.value)}
+                  style={{width: "100%", padding: "14px", marginBottom: "15px", borderRadius: "6px", border: "1px solid #d4c87a"}}
+                />
+                <button onClick={createLeague} style={{width: "100%", padding: "14px", background: "#4a4", color: "white", border: "none", borderRadius: "6px", fontSize: "16px"}}>
+                  Create League
+                </button>
+              </div>
+            )}
+
+            {leagues.length === 0 ? (
+              <p style={{textAlign: "center", color: "#aaa", fontSize: "18px"}}>You have no leagues yet. Create one above.</p>
+            ) : (
+              <div>
+                {leagues.map(league => (
+                  <div key={league.id} style={{background: "rgba(0,0,0,0.3)", padding: "20px", marginBottom: "15px", borderRadius: "8px", borderLeft: "4px solid #d4c87a"}}>
+                    <h3>{league.name}</h3>
+                    <p style={{color: "#aaa"}}>Tournament: {league.tournament} • Free tier: max 20 players</p>
+                    <button style={{marginTop: "10px", padding: "8px 18px", background: "rgba(212,200,122,0.2)", border: "1px solid #d4c87a", color: "#d4c87a", borderRadius: "4px"}}>
+                      Open League →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function LoginScreen() {
+      const [email, setEmail] = useState("");
+      const [password, setPassword] = useState("");
+      const [error, setError] = useState("");
+      const [isLoading, setIsLoading] = useState(false);
+
+      const signInWithGoogle = async () => {
+        setIsLoading(true);
+        setError("");
+        try {
+          const provider = new firebase.auth.GoogleAuthProvider();
+          await fbAuth.signInWithPopup(provider);
+        } catch (err) {
+          setError(err.message || "Google sign in failed");
+        }
+        setIsLoading(false);
+      };
+
+      const signInWithEmail = async () => {
+        if (!email || !password) {
+          setError("Please enter email and password");
+          return;
+        }
+        setIsLoading(true);
+        setError("");
+        try {
+          await fbAuth.signInWithEmailAndPassword(email, password);
+        } catch (err) {
+          setError(err.message || "Login failed");
+        }
+        setIsLoading(false);
+      };
+
+      return (
+        <div style={{
+          minHeight: "100vh",
+          background: "linear-gradient(175deg,#0a3d1c 0%,#0d4a22 100%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#f0ead0"
+        }}>
+          <div style={{background: "rgba(0,0,0,0.5)", padding: "50px 45px", borderRadius: "14px", border: "1px solid rgba(212,200,122,0.4)", width: "420px", textAlign: "center"}}>
+            <h1 style={{color: "#d4c87a", marginBottom: "8px"}}>GOLF POOL PRO</h1>
+            <p style={{color: "rgba(212,200,122,0.85)", marginBottom: "40px"}}>Private League Manager</p>
+
+            <button onClick={signInWithGoogle} disabled={isLoading} style={{width: "100%", padding: "16px", background: "#fff", color: "#000", border: "none", borderRadius: "8px", marginBottom: "30px", fontSize: "17px"}}>
+              {isLoading ? "Signing in..." : "Sign in with Google"}
+            </button>
+
+            <div style={{margin: "20px 0", color: "rgba(200,184,106,0.6)"}}>— or —</div>
+
+            <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{width: "100%", padding: "14px", marginBottom: "12px", borderRadius: "6px"}} />
+            <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} style={{width: "100%", padding: "14px", marginBottom: "25px", borderRadius: "6px"}} />
+
+            <button onClick={signInWithEmail} disabled={isLoading} style={{width: "100%", padding: "16px", background: "#d4c87a", color: "#0a3d1c", border: "none", borderRadius: "8px", fontSize: "17px", fontWeight: "600"}}>
+              Sign In
+            </button>
+
+            {error && <p style={{color: "#ff6666", marginTop: "15px"}}>{error}</p>}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(React.createElement(GolfPoolPro), document.getElementById("root"));
+  </script>
+</body>
+</html>
