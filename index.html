@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Poolside</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%23006747'/%3E%3Cpath d='M28 14 L28 48' stroke='%23FFD700' stroke-width='2'/%3E%3Cpath d='M28 14 L42 20 L28 26 Z' fill='%23FFD700'/%3E%3Cellipse cx='32' cy='50' rx='12' ry='3' fill='%23006747' stroke='%23FFD700' stroke-width='1'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%230f172a'/%3E%3Ctext x='32' y='42' font-size='32' text-anchor='middle' fill='%23d4af37' font-family='Georgia,serif' font-weight='bold'%3EP%3C/text%3E%3C/svg%3E">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
@@ -14,8 +14,9 @@
   
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #1a2e1a; font-family: 'Georgia', serif; }
+    body { background: #0a1729; font-family: 'Georgia', serif; }
     #root { min-height: 100vh; }
+    select option { background: #1a2744; color: #f0ead0; }
   </style>
 </head>
 <body>
@@ -4336,7 +4337,7 @@
           btnDanger: { padding:"6px 12px", background:"transparent", border:"1px solid rgba(200,60,60,0.3)", color:"#c44", borderRadius:"4px", fontSize:"11px", cursor:"pointer" },
           input: { width:"100%", padding:"10px 14px", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(212,175,55,0.2)", borderRadius:"6px", color:"#f0ead0", fontSize:"14px", fontFamily:"Georgia, serif", marginBottom:"10px" },
           label: { display:"block", fontSize:"12px", color:"rgba(212,175,55,0.7)", marginBottom:"4px", letterSpacing:1, textTransform:"uppercase" },
-          select: { width:"100%", padding:"10px 14px", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(212,175,55,0.2)", borderRadius:"6px", color:"#f0ead0", fontSize:"14px", fontFamily:"Georgia, serif", marginBottom:"10px" },
+          select: { width:"100%", padding:"10px 14px", background:"#1a2744", border:"1px solid rgba(212,175,55,0.2)", borderRadius:"6px", color:"#f0ead0", fontSize:"14px", fontFamily:"Georgia, serif", marginBottom:"10px" },
         };
 
         return (
