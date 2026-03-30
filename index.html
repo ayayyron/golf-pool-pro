@@ -423,28 +423,31 @@
 
     
     // ── Storage: shared keys → Firebase, local keys → localStorage
+    // leaguePrefix can be set to scope data per league (e.g., "pool-league_123-")
+    let _leaguePrefix = "";
+    function setLeaguePrefix(prefix) { _leaguePrefix = prefix || ""; }
+
     function loadS(k) {
+      const pk = _leaguePrefix + k;
       if (SHARED_KEYS.has(k) && fbDb) {
         return new Promise((resolve) => {
-          fbDb.ref(k).once("value").then(snap => {
+          fbDb.ref(pk).once("value").then(snap => {
             resolve(snap.exists() ? snap.val() : null);
           }).catch(() => {
-            // Fallback to localStorage
-            try { const v = localStorage.getItem(k); resolve(v ? JSON.parse(v) : null); }
+            try { const v = localStorage.getItem(pk); resolve(v ? JSON.parse(v) : null); }
             catch { resolve(null); }
           });
         });
       }
-      try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; }
+      try { const v = localStorage.getItem(pk); return v ? JSON.parse(v) : null; }
       catch { return null; }
     }
     
     function saveS(k, d) {
-      // Always save to localStorage as backup
-      try { localStorage.setItem(k, JSON.stringify(d)); } catch {}
-      // Shared keys also go to Firebase
+      const pk = _leaguePrefix + k;
+      try { localStorage.setItem(pk, JSON.stringify(d)); } catch {}
       if (SHARED_KEYS.has(k) && fbDb) {
-        try { fbDb.ref(k).set(d); } catch (e) { console.error("Firebase save:", e); }
+        try { fbDb.ref(pk).set(d); } catch (e) { console.error("Firebase save:", e); }
       }
     }
     
@@ -1199,9 +1202,69 @@
       );
     }
     
-    function GolfPool({ leagueTheme }) {
+    function GolfPool({ leagueTheme, leagueConfig, leagueId }) {
       const T = THEMES[leagueTheme] || THEMES.clubhouse;
       const S = useMemo(() => makeStyles(T), [leagueTheme]);
+
+      // Override CFG with league-specific config
+      const LC = leagueConfig || {};
+      const LCFG = useMemo(() => {
+        const base = { ...CFG };
+        if (LC.entryFee != null) base.ENTRY_FEE = Number(LC.entryFee);
+        if (LC.adminFee != null) base.ADMIN_FEE = Number(LC.adminFee);
+        if (LC.venmoUsername) base.VENMO_USERNAME = LC.venmoUsername;
+        if (LC.picksPerTeam) base.PICKS = Number(LC.picksPerTeam);
+        if (LC.bestOf) base.COUNT = Number(LC.bestOf);
+        if (LC.payoutSplit && Array.isArray(LC.payoutSplit)) {
+          const split = {};
+          LC.payoutSplit.forEach((pct, i) => { split[i + 1] = pct / 100; });
+          base.PAYOUT_SPLIT = split;
+        }
+        if (LC.tiers) {
+          const numTiers = Number(LC.tiers);
+          // Generate tier ranges based on number of tiers
+          const tierDefs = {
+            4: [
+              { label: "Tier 1", picks: 2, range: [1, 10], desc: "OWGR 1–10" },
+              { label: "Tier 2", picks: 3, range: [11, 25], desc: "OWGR 11–25" },
+              { label: "Tier 3", picks: 3, range: [26, 50], desc: "OWGR 26–50" },
+              { label: "Tier 4", picks: 2, range: [51, Infinity], desc: "OWGR 51+" },
+            ],
+            5: [
+              { label: "Tier 1", picks: 2, range: [1, 10], desc: "OWGR 1–10" },
+              { label: "Tier 2", picks: 2, range: [11, 25], desc: "OWGR 11–25" },
+              { label: "Tier 3", picks: 2, range: [26, 50], desc: "OWGR 26–50" },
+              { label: "Tier 4", picks: 2, range: [51, 100], desc: "OWGR 51–100" },
+              { label: "Tier 5", picks: 2, range: [101, Infinity], desc: "OWGR 101+" },
+            ],
+            6: [
+              { label: "Tier 1", picks: 1, range: [1, 10], desc: "OWGR 1–10" },
+              { label: "Tier 2", picks: 2, range: [11, 25], desc: "OWGR 11–25" },
+              { label: "Tier 3", picks: 2, range: [26, 50], desc: "OWGR 26–50" },
+              { label: "Tier 4", picks: 2, range: [51, 75], desc: "OWGR 51–75" },
+              { label: "Tier 5", picks: 2, range: [76, 150], desc: "OWGR 76–150" },
+              { label: "Tier 6", picks: 1, range: [151, Infinity], desc: "OWGR 151+" },
+            ],
+          };
+          if (tierDefs[numTiers]) base.TIERS = tierDefs[numTiers];
+        }
+        if (LC.lockDate) base.LOCK_TIME = new Date(LC.lockDate).getTime();
+        if (LC.tournament) base.TARGET_TOURNAMENT = LC.tournament;
+        // Use league-specific Firebase path for data isolation
+        if (leagueId) {
+          base.SK_PREFIX = `pool-${leagueId}-`;
+        }
+        return base;
+      }, [LC, leagueId]);
+
+      // Set league-scoped storage prefix
+      useEffect(() => {
+        if (leagueId) {
+          setLeaguePrefix(`pool-${leagueId}-`);
+        }
+        return () => setLeaguePrefix("");
+      }, [leagueId]);
+
       // ── Core state ────────────────────────────────────────────
       const [view, setView] = useState("leaderboard");
       const [teams, setTeams] = useState({});
@@ -4311,7 +4374,18 @@
       const [selectedLeague, setSelectedLeague] = useState(null);
       const [showUpgradeModal, setShowUpgradeModal] = useState(false);
       const [selectedTier, setSelectedTier] = useState(null);
-      const [subscription, setSubscription] = useState(null); // { tier: "pro"|"elite", active: true }
+      const [subscription, setSubscription] = useState(null);
+      const [sharedLeagueId, setSharedLeagueId] = useState(null);
+
+      // Check for shared league URL on mount: ?league=league_123&owner=uid
+      useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const leagueParam = params.get("league");
+        const ownerParam = params.get("owner");
+        if (leagueParam && ownerParam) {
+          setSharedLeagueId({ id: leagueParam, ownerId: ownerParam });
+        }
+      }, []);
 
       useEffect(() => {
         initFirebase();
@@ -4461,6 +4535,48 @@
 
       if (loading) return <div style={{padding:"120px", textAlign:"center", color:"#d4c87a", fontFamily:"Georgia, serif", fontSize:"18px"}}>Loading Poolside...</div>;
 
+      // ====================== SHARED LEAGUE VIEW (public, no login required) ======================
+      if (sharedLeagueId && !selectedLeague) {
+        // Load the shared league from Firebase
+        return <SharedLeagueLoader sharedLeagueId={sharedLeagueId} onLoaded={(league) => {
+          setSelectedLeague(league);
+          setCurrentView("pool");
+        }} onLogin={() => {
+          setSharedLeagueId(null);
+          setCurrentView("login");
+        }} />;
+      }
+
+      // If shared league is loaded, show it directly (even without login)
+      if (sharedLeagueId && selectedLeague && currentView === "pool") {
+        const T = THEMES[selectedLeague.theme] || THEMES.clubhouse;
+        return (
+          <div style={{ minHeight:"100vh", background: T.bg, fontFamily:"'Playfair Display',Georgia,serif" }}>
+            <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:1000, background: T.navBg, padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:`1px solid ${T.accentFaint}` }}>
+              <span style={{ color:T.accent, fontSize:"14px", fontWeight:700, letterSpacing:2 }}>{selectedLeague.name}</span>
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                {selectedLeague.logoUrl && <img src={selectedLeague.logoUrl} alt="Logo" style={{ height:28, borderRadius:4 }} />}
+                {!user && (
+                  <button onClick={() => { setSharedLeagueId(null); setSelectedLeague(null); setCurrentView("login"); }}
+                    style={{ padding:"6px 14px", background:T.accent, color:T.bgSolid, border:"none", borderRadius:"4px", cursor:"pointer", fontSize:"12px", fontWeight:600 }}>
+                    Sign In
+                  </button>
+                )}
+                {user && (
+                  <button onClick={() => { setSharedLeagueId(null); setSelectedLeague(null); setCurrentView("dashboard"); window.history.pushState({}, "", window.location.pathname); }}
+                    style={{ padding:"6px 14px", background:"transparent", border:`1px solid ${T.accentFaint}`, color:T.accent, borderRadius:"4px", cursor:"pointer", fontSize:"12px" }}>
+                    My Leagues
+                  </button>
+                )}
+              </div>
+            </div>
+            <div style={{ paddingTop:"50px" }}>
+              <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} leagueConfig={selectedLeague} leagueId={selectedLeague.id} />
+            </div>
+          </div>
+        );
+      }
+
       if (currentView === "login" || !user) return <LoginScreen />;
 
       // ====================== DASHBOARD ======================
@@ -4529,6 +4645,12 @@
                     </div>
                     <div style={{ display:"flex", gap:8 }}>
                       <button onClick={() => openLeague(l)} style={S_DASH.btn}>Open →</button>
+                      <button onClick={() => {
+                        const url = `${window.location.origin}?league=${l.id}&owner=${user.uid}`;
+                        navigator.clipboard.writeText(url).then(() => alert("Share link copied!\n\n" + url)).catch(() => {
+                          window.prompt("Copy this link:", url);
+                        });
+                      }} style={S_DASH.btnOutline}>Share</button>
                       <button onClick={() => deleteLeague(l.id)} style={S_DASH.btnDanger}>Delete</button>
                     </div>
                   </div>
@@ -4765,7 +4887,7 @@
             </div>
             
             <div style={{ paddingTop:"50px" }}>
-              <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} />
+              <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} leagueConfig={selectedLeague} leagueId={selectedLeague.id} />
             </div>
           </div>
         );
@@ -4773,6 +4895,42 @@
 
       return <div>Loading...</div>;
     }
+    // Loads a shared league from Firebase by owner UID + league ID
+    function SharedLeagueLoader({ sharedLeagueId, onLoaded, onLogin }) {
+      const [error, setError] = useState(null);
+
+      useEffect(() => {
+        const { id, ownerId } = sharedLeagueId;
+        initFirebase();
+        fbDb.ref(`users/${ownerId}/leagues/${id}`).once("value").then(snap => {
+          const data = snap.val();
+          if (data) {
+            onLoaded({ ...data, id, ownerId });
+          } else {
+            setError("League not found. It may have been deleted.");
+          }
+        }).catch(e => {
+          setError("Could not load league: " + e.message);
+        });
+      }, [sharedLeagueId]);
+
+      if (error) {
+        return (
+          <div style={{ minHeight:"100vh", background:"#0a1729", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Georgia, serif" }}>
+            <div style={{ textAlign:"center", color:"#f0ead0" }}>
+              <h2 style={{ color:"#d4af37", marginBottom:12 }}>POOLSIDE</h2>
+              <p style={{ color:"rgba(255,255,255,0.5)", marginBottom:20 }}>{error}</p>
+              <button onClick={onLogin} style={{ padding:"10px 24px", background:"#d4af37", color:"#0a1729", border:"none", borderRadius:6, cursor:"pointer", fontWeight:600 }}>
+                Go to Poolside →
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      return <div style={{ minHeight:"100vh", background:"#0a1729", display:"flex", alignItems:"center", justifyContent:"center", color:"#d4af37", fontFamily:"Georgia, serif" }}>Loading pool...</div>;
+    }
+
     function LoginScreen() {
       const [email, setEmail] = useState("");
       const [password, setPassword] = useState("");
