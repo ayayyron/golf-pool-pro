@@ -1204,7 +1204,19 @@
     
     function GolfPool({ leagueTheme, leagueConfig, leagueId }) {
       const T = THEMES[leagueTheme] || THEMES.clubhouse;
-      const S = useMemo(() => makeStyles(T), [leagueTheme]);
+
+      // Screen size detection (needed before styles)
+      const [screenWidth, setScreenWidth] = useState(window.innerWidth);
+      const isMobile = screenWidth < 500;
+      const isTablet = screenWidth >= 500 && screenWidth <= 1024;
+      const isDesktop = screenWidth > 1024;
+      useEffect(() => {
+        const onResize = () => setScreenWidth(window.innerWidth);
+        window.addEventListener("resize", onResize);
+        return () => window.removeEventListener("resize", onResize);
+      }, []);
+
+      const S = useMemo(() => makeStyles(T, screenWidth), [leagueTheme, screenWidth]);
 
       // Override CFG with league-specific config
       const LC = leagueConfig || {};
@@ -2108,13 +2120,6 @@
       }));
     
       // ── Tab config ────────────────────────────────────────────
-      // Detect mobile
-      const [isMobile, setIsMobile] = useState(window.innerWidth < 500);
-      useEffect(() => {
-        const onResize = () => setIsMobile(window.innerWidth < 500);
-        window.addEventListener("resize", onResize);
-        return () => window.removeEventListener("resize", onResize);
-      }, []);
     
       const tabs = [
         { id: "leaderboard", l: isMobile ? "Pool" : "Pool" },
@@ -2341,9 +2346,9 @@
             {/* ══════════════════════════════════════════════════ */}
             {view === "leaderboard" && (
               <div style={{
-                display: isMobile ? "block" : "grid",
-                gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-                gap: isMobile ? 0 : 24,
+                display: isDesktop ? "grid" : "block",
+                gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr",
+                gap: isDesktop ? 24 : 0,
                 alignItems: "start",
               }}>
               <div>
@@ -2725,7 +2730,7 @@
               </div>
     
               {/* Desktop: stats sidebar */}
-              {!isMobile && stats && (
+              {isDesktop && stats && (
                 <div style={{ padding: "20px 0" }}>
                   <h2 style={S.sectionTitle}>Pool Stats</h2>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -4178,7 +4183,13 @@
     // ═══════════════════════════════════════════════════════════════
     // STYLES
     // ═══════════════════════════════════════════════════════════════
-    const makeStyles = (T) => ({
+    const makeStyles = (T, screenW) => {
+      const mobile = screenW < 500;
+      const tablet = screenW >= 500 && screenW <= 1024;
+      const padX = mobile ? 8 : tablet ? 14 : 8;  // horizontal padding
+      const touchMin = tablet ? 44 : 36; // minimum touch target height
+      const baseFontBump = tablet ? 1 : 0; // slight font increase on tablet
+      return {
       root: {
         minHeight: "100vh",
         background: T.bg,
@@ -4191,7 +4202,7 @@
         backgroundImage: `radial-gradient(ellipse at 30% 20%,${T.accentFaint} 0%,transparent 60%)`,
         pointerEvents: "none", zIndex: 0,
       },
-      wrap: { position: "relative", zIndex: 1, maxWidth: 1400, margin: "0 auto", padding: "0 20px 40px" },
+      wrap: { position: "relative", zIndex: 1, maxWidth: 1400, margin: "0 auto", padding: tablet ? "0 28px 40px" : "0 20px 40px" },
     
       // Ticker
       ticker: {
@@ -4230,9 +4241,9 @@
       // Nav
       nav: { display: "flex", justifyContent: "center", borderBottom: `1px solid ${T.accentFaint}`, overflowX: "auto", WebkitOverflowScrolling: "touch" },
       nb: {
-        padding: "11px 12px", border: "none", cursor: "pointer",
+        padding: tablet ? "14px 16px" : "11px 12px", border: "none", cursor: "pointer",
         background: "transparent", color: T.accentLight,
-        borderBottom: "2px solid transparent", fontSize: 13,
+        borderBottom: "2px solid transparent", fontSize: 13 + baseFontBump,
         letterSpacing: 1.5, textTransform: "uppercase", whiteSpace: "nowrap",
         fontFamily: "'Playfair Display',Georgia,serif", transition: "all 0.2s",
         flex: "0 0 auto",
@@ -4247,7 +4258,7 @@
       },
       bhc: { textAlign: "center" },
       boardRow: {
-        display: "flex", alignItems: "center", padding: "11px 8px",
+        display: "flex", alignItems: "center", padding: tablet ? "14px 12px" : "11px 8px",
         cursor: "pointer", transition: "background 0.15s",
         borderBottom: `1px solid ${T.accentFaint}`,
       },
@@ -4264,7 +4275,7 @@
         textTransform: "uppercase", color: T.accentLight, fontWeight: 600,
         borderBottom: `1px solid ${T.accentFaint}`,
       },
-      gRow: { display: "flex", alignItems: "center", padding: "6px 0", fontSize: 14 },
+      gRow: { display: "flex", alignItems: "center", padding: tablet ? "8px 0" : "6px 0", fontSize: 14 + baseFontBump },
       gTotal: {
         display: "flex", alignItems: "center", padding: "8px 0",
         borderTop: `1px solid ${T.accentFaint}`,
@@ -4296,9 +4307,9 @@
         color: T.accentLight, textTransform: "uppercase", marginBottom: 3,
       },
       formInput: {
-        width: "100%", padding: "9px 11px", background: "rgba(0,0,0,0.25)",
+        width: "100%", padding: tablet ? "12px 14px" : "9px 11px", background: "rgba(0,0,0,0.25)",
         border: `1px solid ${T.cardBorder}`, borderRadius: 4,
-        color: T.text, fontSize: 17, fontFamily: "'Playfair Display',Georgia,serif",
+        color: T.text, fontSize: tablet ? 18 : 17, fontFamily: "'Playfair Display',Georgia,serif",
       },
       ok: {
         padding: "9px 14px", background: "rgba(68,204,68,0.08)",
@@ -4321,19 +4332,19 @@
         fontFamily: "'Playfair Display',Georgia,serif",
       },
       chip: {
-        display: "flex", alignItems: "center", padding: "7px 10px",
-        border: "1px solid", borderRadius: 4, fontSize: 13,
+        display: "flex", alignItems: "center", padding: tablet ? "10px 14px" : "7px 10px",
+        border: "1px solid", borderRadius: 4, fontSize: 13 + baseFontBump,
         fontFamily: "'Playfair Display',Georgia,serif", transition: "all 0.15s",
-        minHeight: 36,
+        minHeight: touchMin,
       },
       pickSummary: {
         background: T.accentFaint, border: `1px solid ${T.cardBorder}`,
         borderRadius: 7, padding: 14, marginTop: 16, marginBottom: 14,
       },
       primaryBtn: {
-        display: "block", width: "100%", padding: "12px",
+        display: "block", width: "100%", padding: tablet ? "16px" : "12px",
         background: T.accentFaint, border: `2px solid ${T.accent}`,
-        borderRadius: 5, color: T.accent, fontSize: 17, letterSpacing: 3,
+        borderRadius: 5, color: T.accent, fontSize: tablet ? 18 : 17, letterSpacing: 3,
         textTransform: "uppercase", cursor: "pointer",
         fontFamily: "'Playfair Display',Georgia,serif", fontWeight: 600, transition: "all 0.2s",
       },
@@ -4365,7 +4376,7 @@
         textAlign: "center", padding: "28px 0 8px", fontSize: 10,
         letterSpacing: 3, color: T.textFaint, textTransform: "uppercase",
       },
-    });
+    }; };
     function PoolsideApp() {
       const [user, setUser] = useState(null);
       const [loading, setLoading] = useState(true);
@@ -4430,6 +4441,10 @@
         lockDate: "", lockTime: "",
         tiers: "4", picksPerTeam: 10, bestOf: 5,
         theme: "clubhouse", logoUrl: "",
+        leagueType: "single", // "single" or "season"
+        seasonTournaments: [], // [{name, lockDate}] for season-long
+        noRepeatPicks: true, // can't pick same golfer twice in a season
+        maxTradesPerEvent: 0, // 0 = full new team each tournament
       });
 
       const createLeague = async () => {
@@ -4461,6 +4476,11 @@
           ownerEmail: user.email,
           theme: leagueForm.theme || "clubhouse",
           logoUrl: leagueForm.logoUrl || "",
+          leagueType: leagueForm.leagueType || "single",
+          seasonTournaments: leagueForm.leagueType === "season" ? leagueForm.seasonTournaments : [],
+          noRepeatPicks: leagueForm.noRepeatPicks,
+          maxTradesPerEvent: Number(leagueForm.maxTradesPerEvent) || 0,
+          currentTournamentIdx: 0, // index into seasonTournaments
         };
         await fbDb.ref(`users/${user.uid}/leagues/${leagueId}`).set(leagueData);
         // Also store in global leagues index for discoverability later
@@ -4469,7 +4489,7 @@
           sport: leagueData.sport, ownerId: user.uid, createdAt: Date.now(),
         });
         setShowCreateLeague(false);
-        setLeagueForm({ name: "", tournament: "", sport: "golf", entryFee: 20, adminFee: 0, payoutSplit: "60/30/10", customPayout: "", venmoUsername: "", maxPlayers: 20, lockDate: "", lockTime: "", tiers: "4", picksPerTeam: 10, bestOf: 5, theme: "clubhouse", logoUrl: "" });
+        setLeagueForm({ name: "", tournament: "", sport: "golf", entryFee: 20, adminFee: 0, payoutSplit: "60/30/10", customPayout: "", venmoUsername: "", maxPlayers: 20, lockDate: "", lockTime: "", tiers: "4", picksPerTeam: 10, bestOf: 5, theme: "clubhouse", logoUrl: "", leagueType: "single", seasonTournaments: [], noRepeatPicks: true, maxTradesPerEvent: 0 });
         loadLeagues();
       };
 
@@ -4638,9 +4658,16 @@
                     <div>
                       <h3 style={{ color:t.accent, fontSize:"18px", marginBottom:"4px" }}>{l.name}</h3>
                       <p style={{ fontSize:"12px", color:"rgba(255,255,255,0.4)" }}>
-                        {l.tournament || "No tournament set"} · {"$" + (l.entryFee || 0)} entry
+                        {l.leagueType === "season"
+                          ? `Season · ${(l.seasonTournaments || []).length} tournaments`
+                          : (l.tournament || "No tournament set")
+                        }
+                        {" · $" + (l.entryFee || 0)} entry
                         {l.venmoUsername && (" · @" + l.venmoUsername)}
                         <span style={{ marginLeft:8, padding:"2px 8px", borderRadius:4, fontSize:"10px", background:t.accentFaint, color:t.accentLight }}>{t.name}</span>
+                        {l.leagueType === "season" && (
+                          <span style={{ marginLeft:4, padding:"2px 8px", borderRadius:4, fontSize:"10px", background:"rgba(255,100,100,0.1)", color:"#ff6666" }}>SEASON</span>
+                        )}
                       </p>
                     </div>
                     <div style={{ display:"flex", gap:8 }}>
@@ -4668,8 +4695,123 @@
                   <label style={S_DASH.label}>League Name *</label>
                   <input style={S_DASH.input} value={leagueForm.name} onChange={e => setLeagueForm({...leagueForm, name: e.target.value})} placeholder="e.g. The Sandifer Masters Pool" />
 
-                  <label style={S_DASH.label}>Tournament</label>
-                  <input style={S_DASH.input} value={leagueForm.tournament} onChange={e => setLeagueForm({...leagueForm, tournament: e.target.value})} placeholder="e.g. The Masters 2026" />
+                  <label style={S_DASH.label}>League Type</label>
+                  <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+                    <button onClick={() => setLeagueForm({...leagueForm, leagueType: "single"})} style={{
+                      flex:1, padding:"10px", borderRadius:6, border: leagueForm.leagueType === "single" ? "2px solid #d4af37" : "1px solid rgba(212,175,55,0.2)",
+                      background: leagueForm.leagueType === "single" ? "rgba(212,175,55,0.1)" : "transparent", color: leagueForm.leagueType === "single" ? "#d4af37" : "rgba(255,255,255,0.5)",
+                      cursor:"pointer", fontSize:"13px", fontWeight:600,
+                    }}>Single Tournament</button>
+                    <button onClick={() => setLeagueForm({...leagueForm, leagueType: "season"})} style={{
+                      flex:1, padding:"10px", borderRadius:6, border: leagueForm.leagueType === "season" ? "2px solid #ff6666" : "1px solid rgba(212,175,55,0.2)",
+                      background: leagueForm.leagueType === "season" ? "rgba(255,100,100,0.08)" : "transparent", color: leagueForm.leagueType === "season" ? "#ff6666" : "rgba(255,255,255,0.5)",
+                      cursor:"pointer", fontSize:"13px", fontWeight:600,
+                    }}>
+                      Season-Long
+                      {!isElite && <span style={{ fontSize:"9px", marginLeft:6, color:"rgba(255,255,255,0.3)" }}>ELITE</span>}
+                    </button>
+                  </div>
+
+                  {leagueForm.leagueType === "season" && !isElite && (
+                    <div style={{ padding:12, background:"rgba(255,100,100,0.06)", borderRadius:8, border:"1px solid rgba(255,100,100,0.15)", marginBottom:12, textAlign:"center" }}>
+                      <p style={{ color:"#ff6666", fontSize:"13px", marginBottom:8 }}>Season-long leagues require Elite tier</p>
+                      <button onClick={() => setShowUpgradeModal(true)} style={{ padding:"8px 20px", background:"#ff6666", color:"#fff", border:"none", borderRadius:6, cursor:"pointer", fontSize:"12px", fontWeight:600 }}>Upgrade to Elite</button>
+                    </div>
+                  )}
+
+                  {leagueForm.leagueType === "single" && (
+                    <>
+                      <label style={S_DASH.label}>Tournament</label>
+                      <input style={S_DASH.input} value={leagueForm.tournament} onChange={e => setLeagueForm({...leagueForm, tournament: e.target.value})} placeholder="e.g. The Masters 2026" />
+                    </>
+                  )}
+
+                  {leagueForm.leagueType === "season" && isElite && (
+                    <div style={{ marginBottom:12 }}>
+                      <label style={S_DASH.label}>Season Tournaments</label>
+                      
+                      {/* Preset buttons */}
+                      <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
+                        <button onClick={() => setLeagueForm({...leagueForm, seasonTournaments: [
+                          { name: "The Masters", lockDate: "2026-04-09T08:00" },
+                          { name: "PGA Championship", lockDate: "2026-05-14T08:00" },
+                          { name: "U.S. Open", lockDate: "2026-06-18T08:00" },
+                          { name: "The Open Championship", lockDate: "2026-07-16T08:00" },
+                        ]})} style={{ padding:"8px 14px", borderRadius:6, border:"2px solid rgba(212,175,55,0.4)", background:"rgba(212,175,55,0.08)", color:"#d4af37", cursor:"pointer", fontSize:"12px", fontWeight:600 }}>
+                          ⛳ Majors Only (4)
+                        </button>
+                        <button onClick={() => setLeagueForm({...leagueForm, seasonTournaments: [
+                          { name: "The Players Championship", lockDate: "2026-03-12T08:00" },
+                          { name: "The Masters", lockDate: "2026-04-09T08:00" },
+                          { name: "PGA Championship", lockDate: "2026-05-14T08:00" },
+                          { name: "The Memorial", lockDate: "2026-06-04T08:00" },
+                          { name: "U.S. Open", lockDate: "2026-06-18T08:00" },
+                          { name: "The Open Championship", lockDate: "2026-07-16T08:00" },
+                          { name: "FedEx St. Jude Championship", lockDate: "2026-08-13T08:00" },
+                          { name: "Tour Championship", lockDate: "2026-08-27T08:00" },
+                        ]})} style={{ padding:"8px 14px", borderRadius:6, border:"1px solid rgba(212,175,55,0.2)", background:"transparent", color:"rgba(212,175,55,0.6)", cursor:"pointer", fontSize:"12px" }}>
+                          Signature Events (8)
+                        </button>
+                        <button onClick={() => setLeagueForm({...leagueForm, seasonTournaments: []})}
+                          style={{ padding:"8px 14px", borderRadius:6, border:"1px solid rgba(255,255,255,0.1)", background:"transparent", color:"rgba(255,255,255,0.4)", cursor:"pointer", fontSize:"12px" }}>
+                          Custom
+                        </button>
+                      </div>
+
+                      <p style={{ fontSize:"11px", color:"rgba(255,255,255,0.3)", marginBottom:8 }}>
+                        {leagueForm.seasonTournaments.length > 0 
+                          ? `${leagueForm.seasonTournaments.length} tournaments selected. Edit names and dates below, or add more.`
+                          : "Add tournaments manually or choose a preset above."
+                        }
+                      </p>
+                      
+                      {leagueForm.seasonTournaments.map((t, i) => (
+                        <div key={i} style={{ display:"flex", gap:6, marginBottom:6, alignItems:"center" }}>
+                          <span style={{ color:"rgba(212,175,55,0.5)", fontSize:"12px", width:20 }}>{i + 1}.</span>
+                          <input style={{ ...S_DASH.input, flex:1, marginBottom:0 }} value={t.name}
+                            onChange={e => {
+                              const arr = [...leagueForm.seasonTournaments];
+                              arr[i] = { ...arr[i], name: e.target.value };
+                              setLeagueForm({...leagueForm, seasonTournaments: arr});
+                            }} placeholder="Tournament name" />
+                          <input style={{ ...S_DASH.input, width:180, marginBottom:0, colorScheme:"dark" }} type="datetime-local" value={t.lockDate || ""}
+                            onChange={e => {
+                              const arr = [...leagueForm.seasonTournaments];
+                              arr[i] = { ...arr[i], lockDate: e.target.value };
+                              setLeagueForm({...leagueForm, seasonTournaments: arr});
+                            }} />
+                          <button onClick={() => {
+                            const arr = leagueForm.seasonTournaments.filter((_, j) => j !== i);
+                            setLeagueForm({...leagueForm, seasonTournaments: arr});
+                          }} style={{ background:"none", border:"none", color:"#c44", cursor:"pointer", fontSize:"16px", padding:"4px 8px" }}>×</button>
+                        </div>
+                      ))}
+                      
+                      <button onClick={() => setLeagueForm({...leagueForm, seasonTournaments: [...leagueForm.seasonTournaments, { name: "", lockDate: "" }]})}
+                        style={{ ...S_DASH.btnOutline, fontSize:"12px", padding:"6px 14px", marginTop:4 }}>
+                        + Add Tournament
+                      </button>
+
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:12 }}>
+                        <div>
+                          <label style={S_DASH.label}>No-Repeat Picks</label>
+                          <select style={S_DASH.select} value={leagueForm.noRepeatPicks ? "yes" : "no"} onChange={e => setLeagueForm({...leagueForm, noRepeatPicks: e.target.value === "yes"})}>
+                            <option value="yes">Yes — can't reuse golfers</option>
+                            <option value="no">No — allow repeats</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={S_DASH.label}>Roster Changes</label>
+                          <select style={S_DASH.select} value={leagueForm.maxTradesPerEvent} onChange={e => setLeagueForm({...leagueForm, maxTradesPerEvent: Number(e.target.value)})}>
+                            <option value="0">Full new team each event</option>
+                            <option value="2">Up to 2 swaps per event</option>
+                            <option value="3">Up to 3 swaps per event</option>
+                            <option value="5">Up to 5 swaps per event</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
                     <div>
@@ -4868,26 +5010,146 @@
         );
       }
 
-      // ====================== YOUR ORIGINAL FULL UI ======================
+      // ====================== POOL / SEASON VIEW ======================
       if (currentView === "pool" && selectedLeague) {
         const T = THEMES[selectedLeague.theme] || THEMES.clubhouse;
+        const isSeason = selectedLeague.leagueType === "season";
+        const tournaments = selectedLeague.seasonTournaments || [];
+        const [seasonView, setSeasonView] = useState("current"); // "current", "standings", "schedule"
+        const [activeTournamentIdx, setActiveTournamentIdx] = useState(selectedLeague.currentTournamentIdx || 0);
+
+        // For season leagues, build config for the current tournament
+        const currentTournament = isSeason ? tournaments[activeTournamentIdx] : null;
+        const seasonLeagueConfig = isSeason ? {
+          ...selectedLeague,
+          tournament: currentTournament?.name || "",
+          lockDate: currentTournament?.lockDate || "",
+        } : selectedLeague;
+
+        const seasonLeagueId = isSeason
+          ? `${selectedLeague.id}_t${activeTournamentIdx}`
+          : selectedLeague.id;
+
         return (
           <div style={{ minHeight:"100vh", background: T.bg, fontFamily:"'Playfair Display',Georgia,serif" }}>
+            {/* Top nav */}
             <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:1000, background: T.navBg, padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:`1px solid ${T.accentFaint}` }}>
               <button 
-                onClick={() => setCurrentView("dashboard")} 
+                onClick={() => { setCurrentView("dashboard"); setSeasonView("current"); }}
                 style={{ padding:"6px 14px", background:"transparent", border:`1px solid ${T.accentFaint}`, color:T.accent, borderRadius:"4px", cursor:"pointer", fontSize:"12px" }}
               >
                 ← My Leagues
               </button>
               <span style={{ color:T.accent, fontSize:"14px", fontWeight:700, letterSpacing:2 }}>{selectedLeague.name}</span>
-              {selectedLeague.logoUrl && (
-                <img src={selectedLeague.logoUrl} alt="Logo" style={{ height:28, borderRadius:4 }} />
-              )}
+              <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                {selectedLeague.logoUrl && <img src={selectedLeague.logoUrl} alt="Logo" style={{ height:28, borderRadius:4 }} />}
+              </div>
             </div>
             
             <div style={{ paddingTop:"50px" }}>
-              <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} leagueConfig={selectedLeague} leagueId={selectedLeague.id} />
+              {/* Season navigation bar */}
+              {isSeason && (
+                <div style={{ background:"rgba(0,0,0,0.2)", borderBottom:`1px solid ${T.accentFaint}`, padding:"8px 20px", display:"flex", justifyContent:"center", gap:4, flexWrap:"wrap" }}>
+                  <button onClick={() => setSeasonView("current")} style={{
+                    padding:"6px 16px", borderRadius:4, border:"none", cursor:"pointer", fontSize:"12px", fontWeight:600, letterSpacing:1,
+                    background: seasonView === "current" ? T.accent : "transparent",
+                    color: seasonView === "current" ? T.bgSolid : T.accentLight,
+                  }}>CURRENT EVENT</button>
+                  <button onClick={() => setSeasonView("standings")} style={{
+                    padding:"6px 16px", borderRadius:4, border:"none", cursor:"pointer", fontSize:"12px", fontWeight:600, letterSpacing:1,
+                    background: seasonView === "standings" ? T.accent : "transparent",
+                    color: seasonView === "standings" ? T.bgSolid : T.accentLight,
+                  }}>SEASON STANDINGS</button>
+                  <button onClick={() => setSeasonView("schedule")} style={{
+                    padding:"6px 16px", borderRadius:4, border:"none", cursor:"pointer", fontSize:"12px", fontWeight:600, letterSpacing:1,
+                    background: seasonView === "schedule" ? T.accent : "transparent",
+                    color: seasonView === "schedule" ? T.bgSolid : T.accentLight,
+                  }}>SCHEDULE</button>
+                  <button onClick={() => setSeasonView("props")} style={{
+                    padding:"6px 16px", borderRadius:4, border:"none", cursor:"pointer", fontSize:"12px", fontWeight:600, letterSpacing:1,
+                    background: seasonView === "props" ? "#ff6666" : "transparent",
+                    color: seasonView === "props" ? "#fff" : "rgba(255,100,100,0.7)",
+                  }}>PROPS</button>
+                </div>
+              )}
+
+              {/* Current Event — show the pool for the active tournament */}
+              {(!isSeason || seasonView === "current") && (
+                <div>
+                  {isSeason && (
+                    <div style={{ textAlign:"center", padding:"12px 20px", background:"rgba(0,0,0,0.1)" }}>
+                      <div style={{ display:"flex", justifyContent:"center", alignItems:"center", gap:12 }}>
+                        <button onClick={() => setActiveTournamentIdx(Math.max(0, activeTournamentIdx - 1))}
+                          disabled={activeTournamentIdx === 0}
+                          style={{ background:"none", border:"none", color: activeTournamentIdx === 0 ? T.textFaint : T.accent, cursor:"pointer", fontSize:"18px" }}>◀</button>
+                        <div>
+                          <div style={{ fontSize:"10px", color:T.textMuted, letterSpacing:2, textTransform:"uppercase" }}>
+                            Event {activeTournamentIdx + 1} of {tournaments.length}
+                          </div>
+                          <div style={{ fontSize:"16px", color:T.accent, fontWeight:700 }}>
+                            {currentTournament?.name || "TBD"}
+                          </div>
+                        </div>
+                        <button onClick={() => setActiveTournamentIdx(Math.min(tournaments.length - 1, activeTournamentIdx + 1))}
+                          disabled={activeTournamentIdx >= tournaments.length - 1}
+                          style={{ background:"none", border:"none", color: activeTournamentIdx >= tournaments.length - 1 ? T.textFaint : T.accent, cursor:"pointer", fontSize:"18px" }}>▶</button>
+                      </div>
+                    </div>
+                  )}
+                  <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} leagueConfig={seasonLeagueConfig} leagueId={seasonLeagueId} />
+                </div>
+              )}
+
+              {/* Season Standings */}
+              {isSeason && seasonView === "standings" && (
+                <SeasonStandings league={selectedLeague} theme={T} tournaments={tournaments} />
+              )}
+
+              {/* Schedule */}
+              {isSeason && seasonView === "schedule" && (
+                <div style={{ maxWidth:700, margin:"0 auto", padding:"30px 20px" }}>
+                  <h2 style={{ color:T.accent, fontSize:"20px", letterSpacing:3, textAlign:"center", marginBottom:24, textTransform:"uppercase" }}>Season Schedule</h2>
+                  {tournaments.map((t, i) => {
+                    const isPast = t.lockDate && new Date(t.lockDate) < new Date();
+                    const isCurrent = i === (selectedLeague.currentTournamentIdx || 0);
+                    return (
+                      <div key={i} onClick={() => { setActiveTournamentIdx(i); setSeasonView("current"); }}
+                        style={{
+                          display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 18px",
+                          background: isCurrent ? T.accentFaint : T.card, borderRadius:8, marginBottom:8, cursor:"pointer",
+                          border: isCurrent ? `2px solid ${T.accent}` : `1px solid ${T.cardBorder}`,
+                          transition:"all 0.15s",
+                        }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                          <span style={{ color: isPast ? T.textFaint : T.accent, fontSize:"14px", fontWeight:700, width:28 }}>{i + 1}</span>
+                          <div>
+                            <div style={{ color: isPast ? T.textMuted : T.text, fontSize:"14px", fontWeight: isCurrent ? 700 : 400 }}>{t.name || "TBD"}</div>
+                            {t.lockDate && <div style={{ fontSize:"11px", color:T.textFaint }}>{new Date(t.lockDate).toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" })}</div>}
+                          </div>
+                        </div>
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          {isPast && <span style={{ fontSize:"10px", color:T.textFaint, letterSpacing:1 }}>COMPLETE</span>}
+                          {isCurrent && <span style={{ fontSize:"10px", color:T.accent, fontWeight:700, letterSpacing:1 }}>ACTIVE</span>}
+                          {!isPast && !isCurrent && <span style={{ fontSize:"10px", color:T.textFaint, letterSpacing:1 }}>UPCOMING</span>}
+                          <span style={{ color:T.accentLight, fontSize:"14px" }}>→</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Props (placeholder for next build) */}
+              {isSeason && seasonView === "props" && (
+                <PropsChallenge 
+                  league={selectedLeague} 
+                  theme={T} 
+                  tournamentIdx={activeTournamentIdx}
+                  tournament={currentTournament}
+                  user={user}
+                  isAdmin={user && user.uid === selectedLeague.ownerId}
+                />
+              )}
             </div>
           </div>
         );
@@ -4896,6 +5158,549 @@
       return <div>Loading...</div>;
     }
     // Loads a shared league from Firebase by owner UID + league ID
+    // Season standings: aggregates scores across all tournaments in a season league
+    // ====================== PROP CHALLENGES ======================
+    // Admin creates props, players stake season points, resolved after tournament
+    function PropsChallenge({ league, theme: T, tournamentIdx, tournament, user, isAdmin }) {
+      const [props, setProps] = useState([]);
+      const [bets, setBets] = useState({}); // { propId: { pick, stake } }
+      const [allBets, setAllBets] = useState({}); // all players' bets for display
+      const [seasonPoints, setSeasonPoints] = useState(0);
+      const [showCreate, setShowCreate] = useState(false);
+      const [newProp, setNewProp] = useState({ question: "", type: "yesno", overUnderLine: "", odds: { yes: 100, no: -120, over: -110, under: -110 } });
+      const [myTeamName, setMyTeamName] = useState("");
+      const [submitting, setSubmitting] = useState(false);
+
+      const propsPath = `pool-${league.id}-props-t${tournamentIdx}`;
+      const betsPath = `pool-${league.id}-propbets-t${tournamentIdx}`;
+
+      // Load props, bets, and season points
+      useEffect(() => {
+        if (!fbDb) return;
+
+        // Load props
+        const propsRef = fbDb.ref(propsPath);
+        propsRef.on("value", snap => {
+          const data = snap.val();
+          if (data) {
+            setProps(Object.entries(data).map(([id, p]) => ({ id, ...p })));
+          } else {
+            setProps([]);
+          }
+        });
+
+        // Load all bets
+        const betsRef = fbDb.ref(betsPath);
+        betsRef.on("value", snap => {
+          setAllBets(snap.val() || {});
+        });
+
+        return () => { propsRef.off(); betsRef.off(); };
+      }, [propsPath, betsPath]);
+
+      // Load my team name and season points
+      useEffect(() => {
+        if (!user?.email || !league) return;
+
+        // Find my team name across tournaments
+        const findTeam = async () => {
+          let totalPts = 0;
+          let teamName = "";
+
+          const tournaments = league.seasonTournaments || [];
+          for (let i = 0; i < tournaments.length; i++) {
+            const prefix = `pool-${league.id}_t${i}-`;
+            try {
+              const snap = await fbDb.ref(`${prefix}gp-teams-v5`).once("value");
+              const teams = snap.val();
+              if (teams) {
+                for (const [name, data] of Object.entries(teams)) {
+                  if (data.email === user.email) {
+                    if (!teamName) teamName = name;
+                    // Get score from snapshot
+                    const snapData = await fbDb.ref(`${prefix}gp-snap-v5`).once("value");
+                    const snapshot = snapData.val();
+                    if (snapshot?.leaderboard) {
+                      const lb = Array.isArray(snapshot.leaderboard) ? snapshot.leaderboard : Object.values(snapshot.leaderboard);
+                      const entry = lb.find(e => e.name === name);
+                      if (entry?.teamTotal != null) totalPts += entry.teamTotal;
+                    }
+                    break;
+                  }
+                }
+              }
+            } catch {}
+          }
+
+          // Add/subtract prop bet results
+          for (let i = 0; i < tournaments.length; i++) {
+            try {
+              const betSnap = await fbDb.ref(`pool-${league.id}-propbets-t${i}/${teamName}`).once("value");
+              const myBets = betSnap.val();
+              if (myBets) {
+                for (const [propId, bet] of Object.entries(myBets)) {
+                  if (bet.result === "win") totalPts -= bet.payout; // negative is good in golf
+                  if (bet.result === "lose") totalPts += bet.stake; // positive is bad
+                }
+              }
+            } catch {}
+          }
+
+          setMyTeamName(teamName);
+          setSeasonPoints(totalPts);
+        };
+
+        findTeam();
+      }, [user, league]);
+
+      // Load my bets for current tournament
+      useEffect(() => {
+        if (!myTeamName || !fbDb) return;
+        fbDb.ref(`${betsPath}/${myTeamName}`).once("value", snap => {
+          setBets(snap.val() || {});
+        });
+      }, [myTeamName, betsPath]);
+
+      // Admin: create a prop
+      const createProp = async () => {
+        if (!newProp.question.trim()) return;
+        const propId = "prop_" + Date.now();
+        const propData = {
+          question: newProp.question.trim(),
+          type: newProp.type,
+          overUnderLine: newProp.type === "overunder" ? Number(newProp.overUnderLine) : null,
+          odds: newProp.type === "yesno"
+            ? { yes: Number(newProp.odds.yes), no: Number(newProp.odds.no) }
+            : { over: Number(newProp.odds.over), under: Number(newProp.odds.under) },
+          status: "open", // open, locked, resolved
+          result: null, // "yes", "no", "over", "under"
+          createdAt: Date.now(),
+          tournament: tournament?.name || "",
+        };
+        await fbDb.ref(`${propsPath}/${propId}`).set(propData);
+        setNewProp({ question: "", type: "yesno", overUnderLine: "", odds: { yes: 100, no: -120, over: -110, under: -110 } });
+        setShowCreate(false);
+      };
+
+      // Player: place a bet
+      const placeBet = async (propId, pick, stake) => {
+        if (!myTeamName) return alert("You need a team registered in this season to place bets.");
+        if (stake <= 0) return;
+        const maxStake = Math.floor(Math.abs(seasonPoints) * 0.25) || 5;
+        if (stake > maxStake) return alert(`Max stake is ${maxStake} points (25% of your season total).`);
+
+        const prop = props.find(p => p.id === propId);
+        if (!prop) return;
+
+        const oddsVal = prop.odds[pick];
+        const payout = oddsVal > 0 ? Math.round(stake * (oddsVal / 100)) : Math.round(stake * (100 / Math.abs(oddsVal)));
+
+        const betData = { pick, stake, payout, placedAt: Date.now(), result: null };
+        await fbDb.ref(`${betsPath}/${myTeamName}/${propId}`).set(betData);
+        setBets(prev => ({ ...prev, [propId]: betData }));
+      };
+
+      // Admin: resolve a prop
+      const resolveProp = async (propId, result) => {
+        await fbDb.ref(`${propsPath}/${propId}/status`).set("resolved");
+        await fbDb.ref(`${propsPath}/${propId}/result`).set(result);
+
+        // Resolve all bets for this prop
+        const allBetsSnap = await fbDb.ref(betsPath).once("value");
+        const allBetsData = allBetsSnap.val() || {};
+        for (const [teamName, teamBets] of Object.entries(allBetsData)) {
+          if (teamBets[propId]) {
+            const bet = teamBets[propId];
+            const won = bet.pick === result;
+            await fbDb.ref(`${betsPath}/${teamName}/${propId}/result`).set(won ? "win" : "lose");
+          }
+        }
+      };
+
+      // Admin: lock a prop (no more bets)
+      const lockProp = async (propId) => {
+        await fbDb.ref(`${propsPath}/${propId}/status`).set("locked");
+      };
+
+      // Helper: format American odds
+      const fmtOdds = (odds) => odds > 0 ? `+${odds}` : `${odds}`;
+
+      // Calculate payout for display
+      const calcPayout = (stake, odds) => {
+        if (!stake || !odds) return 0;
+        return odds > 0 ? Math.round(stake * (odds / 100)) : Math.round(stake * (100 / Math.abs(odds)));
+      };
+
+      const S_PROP = {
+        card: { background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 10, padding: 20, marginBottom: 12 },
+        label: { fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: T.accentLight, marginBottom: 4 },
+        input: { padding: "8px 12px", background: "rgba(0,0,0,0.2)", border: `1px solid ${T.cardBorder}`, borderRadius: 4, color: T.text, fontSize: 14, fontFamily: "Georgia, serif" },
+      };
+
+      return (
+        <div style={{ maxWidth: 700, margin: "0 auto", padding: "24px 20px" }}>
+          <div style={{ textAlign: "center", marginBottom: 24 }}>
+            <h2 style={{ color: "#ff6666", fontSize: 22, letterSpacing: 3, marginBottom: 4 }}>PROP CHALLENGES</h2>
+            <p style={{ color: T.textMuted, fontSize: 13 }}>
+              {tournament?.name || "Tournament"} · Stake your season points
+            </p>
+            {myTeamName && (
+              <div style={{ marginTop: 12, display: "inline-flex", gap: 16, padding: "8px 20px", background: T.card, borderRadius: 8, border: `1px solid ${T.cardBorder}` }}>
+                <div>
+                  <div style={{ fontSize: 10, color: T.textFaint, letterSpacing: 1 }}>YOUR TEAM</div>
+                  <div style={{ fontSize: 14, color: T.accent, fontWeight: 700 }}>{myTeamName}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: T.textFaint, letterSpacing: 1 }}>SEASON SCORE</div>
+                  <div style={{ fontSize: 14, color: seasonPoints < 0 ? T.red : T.green, fontWeight: 700, fontFamily: "monospace" }}>
+                    {seasonPoints > 0 ? `+${seasonPoints}` : seasonPoints === 0 ? "E" : seasonPoints}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: T.textFaint, letterSpacing: 1 }}>MAX STAKE</div>
+                  <div style={{ fontSize: 14, color: "#ff6666", fontWeight: 700, fontFamily: "monospace" }}>
+                    {Math.floor(Math.abs(seasonPoints) * 0.25) || 5} pts
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Admin: Create prop button */}
+          {isAdmin && (
+            <div style={{ textAlign: "center", marginBottom: 20 }}>
+              <button onClick={() => setShowCreate(!showCreate)} style={{
+                padding: "10px 24px", background: "rgba(255,100,100,0.1)", border: "1px solid rgba(255,100,100,0.3)",
+                color: "#ff6666", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600,
+              }}>
+                {showCreate ? "Cancel" : "+ Create New Prop"}
+              </button>
+            </div>
+          )}
+
+          {/* Admin: Create prop form */}
+          {isAdmin && showCreate && (
+            <div style={{ ...S_PROP.card, borderColor: "rgba(255,100,100,0.2)", marginBottom: 20 }}>
+              <div style={S_PROP.label}>Question</div>
+              <input style={{ ...S_PROP.input, width: "100%", marginBottom: 10 }} value={newProp.question}
+                onChange={e => setNewProp({ ...newProp, question: e.target.value })}
+                placeholder="e.g. Will there be a hole-in-one this tournament?" />
+
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                <button onClick={() => setNewProp({ ...newProp, type: "yesno" })} style={{
+                  flex: 1, padding: 8, borderRadius: 4, border: newProp.type === "yesno" ? "2px solid #ff6666" : `1px solid ${T.cardBorder}`,
+                  background: newProp.type === "yesno" ? "rgba(255,100,100,0.1)" : "transparent",
+                  color: newProp.type === "yesno" ? "#ff6666" : T.textMuted, cursor: "pointer", fontSize: 12,
+                }}>Yes / No</button>
+                <button onClick={() => setNewProp({ ...newProp, type: "overunder" })} style={{
+                  flex: 1, padding: 8, borderRadius: 4, border: newProp.type === "overunder" ? "2px solid #ff6666" : `1px solid ${T.cardBorder}`,
+                  background: newProp.type === "overunder" ? "rgba(255,100,100,0.1)" : "transparent",
+                  color: newProp.type === "overunder" ? "#ff6666" : T.textMuted, cursor: "pointer", fontSize: 12,
+                }}>Over / Under</button>
+              </div>
+
+              {newProp.type === "overunder" && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={S_PROP.label}>Line</div>
+                  <input style={{ ...S_PROP.input, width: 100 }} type="number" value={newProp.overUnderLine}
+                    onChange={e => setNewProp({ ...newProp, overUnderLine: e.target.value })} placeholder="e.g. 20.5" />
+                </div>
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+                <div>
+                  <div style={S_PROP.label}>{newProp.type === "yesno" ? "Yes Odds" : "Over Odds"}</div>
+                  <input style={{ ...S_PROP.input, width: "100%" }} type="number"
+                    value={newProp.type === "yesno" ? newProp.odds.yes : newProp.odds.over}
+                    onChange={e => setNewProp({ ...newProp, odds: { ...newProp.odds, [newProp.type === "yesno" ? "yes" : "over"]: e.target.value } })}
+                    placeholder="+150" />
+                </div>
+                <div>
+                  <div style={S_PROP.label}>{newProp.type === "yesno" ? "No Odds" : "Under Odds"}</div>
+                  <input style={{ ...S_PROP.input, width: "100%" }} type="number"
+                    value={newProp.type === "yesno" ? newProp.odds.no : newProp.odds.under}
+                    onChange={e => setNewProp({ ...newProp, odds: { ...newProp.odds, [newProp.type === "yesno" ? "no" : "under"]: e.target.value } })}
+                    placeholder="-120" />
+                </div>
+              </div>
+
+              <button onClick={createProp} style={{
+                width: "100%", padding: 10, background: "#ff6666", color: "#fff", border: "none",
+                borderRadius: 6, cursor: "pointer", fontSize: 14, fontWeight: 600,
+              }}>Create Prop</button>
+            </div>
+          )}
+
+          {/* Props list */}
+          {props.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: T.textMuted }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>🎲</div>
+              <p>No props yet for this tournament.</p>
+              {isAdmin && <p style={{ fontSize: 12, marginTop: 8, color: T.textFaint }}>Click "Create New Prop" above to get started.</p>}
+            </div>
+          ) : props.map(prop => {
+            const myBet = bets[prop.id];
+            const isOpen = prop.status === "open";
+            const isLocked = prop.status === "locked";
+            const isResolved = prop.status === "resolved";
+            const options = prop.type === "yesno" ? ["yes", "no"] : ["over", "under"];
+            const optionLabels = prop.type === "yesno" ? { yes: "YES", no: "NO" } : { over: `OVER ${prop.overUnderLine}`, under: `UNDER ${prop.overUnderLine}` };
+
+            // Count total bets
+            let totalBets = 0;
+            for (const teamBets of Object.values(allBets)) {
+              if (teamBets[prop.id]) totalBets++;
+            }
+
+            return (
+              <div key={prop.id} style={{
+                ...S_PROP.card,
+                borderLeft: isResolved ? `4px solid ${prop.result ? T.green : T.textFaint}` : isLocked ? `4px solid #ff6666` : `4px solid ${T.accent}`,
+              }}>
+                {/* Status badge */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <span style={{
+                    fontSize: 10, letterSpacing: 1, padding: "2px 8px", borderRadius: 3,
+                    background: isOpen ? "rgba(74,222,128,0.1)" : isLocked ? "rgba(255,100,100,0.1)" : "rgba(255,255,255,0.06)",
+                    color: isOpen ? T.green : isLocked ? "#ff6666" : T.textFaint,
+                  }}>{isOpen ? "OPEN" : isLocked ? "LOCKED" : "RESOLVED"}</span>
+                  <span style={{ fontSize: 11, color: T.textFaint }}>{totalBets} bet{totalBets !== 1 ? "s" : ""}</span>
+                </div>
+
+                {/* Question */}
+                <h3 style={{ fontSize: 16, color: T.text, marginBottom: 12, lineHeight: 1.4 }}>{prop.question}</h3>
+
+                {/* Options with odds */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+                  {options.map(opt => {
+                    const odds = prop.odds[opt];
+                    const isMyPick = myBet?.pick === opt;
+                    const isWinner = isResolved && prop.result === opt;
+                    return (
+                      <div key={opt} style={{
+                        padding: "12px", borderRadius: 6, textAlign: "center",
+                        background: isWinner ? "rgba(74,222,128,0.1)" : isMyPick ? "rgba(255,100,100,0.1)" : "rgba(0,0,0,0.15)",
+                        border: isWinner ? `2px solid ${T.green}` : isMyPick ? "2px solid #ff6666" : `1px solid ${T.cardBorder}`,
+                      }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: isWinner ? T.green : isMyPick ? "#ff6666" : T.text }}>
+                          {optionLabels[opt]}
+                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "monospace", color: isWinner ? T.green : T.accent, marginTop: 4 }}>
+                          {fmtOdds(odds)}
+                        </div>
+                        {isWinner && <div style={{ fontSize: 10, color: T.green, marginTop: 4 }}>✓ WINNER</div>}
+                        {isMyPick && !isResolved && <div style={{ fontSize: 10, color: "#ff6666", marginTop: 4 }}>YOUR PICK</div>}
+                        {isMyPick && isResolved && (
+                          <div style={{ fontSize: 10, color: myBet.result === "win" ? T.green : T.red, marginTop: 4, fontWeight: 700 }}>
+                            {myBet.result === "win" ? `WON +${myBet.payout} pts` : `LOST ${myBet.stake} pts`}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Player: Place bet (only if open and no existing bet) */}
+                {isOpen && !myBet && myTeamName && (
+                  <PropBetForm prop={prop} options={options} optionLabels={optionLabels}
+                    onPlace={(pick, stake) => placeBet(prop.id, pick, stake)}
+                    maxStake={Math.floor(Math.abs(seasonPoints) * 0.25) || 5}
+                    theme={T} calcPayout={calcPayout} fmtOdds={fmtOdds} />
+                )}
+
+                {/* Existing bet display */}
+                {myBet && !isResolved && (
+                  <div style={{ padding: "8px 12px", background: "rgba(255,100,100,0.06)", borderRadius: 6, fontSize: 12, color: T.textMuted }}>
+                    You staked <strong style={{ color: "#ff6666" }}>{myBet.stake} pts</strong> on <strong style={{ color: T.text }}>{optionLabels[myBet.pick]}</strong>.
+                    Potential payout: <strong style={{ color: T.green }}>+{myBet.payout} pts</strong>
+                  </div>
+                )}
+
+                {/* Admin controls */}
+                {isAdmin && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 10, justifyContent: "flex-end" }}>
+                    {isOpen && (
+                      <button onClick={() => lockProp(prop.id)} style={{
+                        padding: "5px 12px", fontSize: 11, background: "rgba(255,100,100,0.1)",
+                        border: "1px solid rgba(255,100,100,0.2)", color: "#ff6666", borderRadius: 4, cursor: "pointer",
+                      }}>Lock Betting</button>
+                    )}
+                    {(isOpen || isLocked) && options.map(opt => (
+                      <button key={opt} onClick={() => {
+                        if (window.confirm(`Resolve as "${optionLabels[opt]}"? This will settle all bets.`)) {
+                          resolveProp(prop.id, opt);
+                        }
+                      }} style={{
+                        padding: "5px 12px", fontSize: 11, background: T.accentFaint,
+                        border: `1px solid ${T.cardBorder}`, color: T.accent, borderRadius: 4, cursor: "pointer",
+                      }}>Result: {optionLabels[opt]}</button>
+                    ))}
+                    {isResolved && (
+                      <span style={{ fontSize: 11, color: T.textFaint, padding: "5px 0" }}>Settled ✓</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Inline bet form for a single prop
+    function PropBetForm({ prop, options, optionLabels, onPlace, maxStake, theme: T, calcPayout, fmtOdds }) {
+      const [pick, setPick] = useState(null);
+      const [stake, setStake] = useState("");
+
+      const stakeNum = Number(stake) || 0;
+      const payout = pick ? calcPayout(stakeNum, prop.odds[pick]) : 0;
+
+      return (
+        <div style={{ padding: 12, background: "rgba(0,0,0,0.1)", borderRadius: 6, border: `1px solid ${T.cardBorder}` }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            {options.map(opt => (
+              <button key={opt} onClick={() => setPick(opt)} style={{
+                flex: 1, padding: "8px", borderRadius: 4, cursor: "pointer", fontSize: 12, fontWeight: 600,
+                background: pick === opt ? "rgba(255,100,100,0.15)" : "transparent",
+                border: pick === opt ? "2px solid #ff6666" : `1px solid ${T.cardBorder}`,
+                color: pick === opt ? "#ff6666" : T.textMuted,
+              }}>{optionLabels[opt]} ({fmtOdds(prop.odds[opt])})</button>
+            ))}
+          </div>
+          {pick && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ flex: 1 }}>
+                <input type="number" value={stake} onChange={e => setStake(e.target.value)}
+                  placeholder={`Stake (max ${maxStake})`} min="1" max={maxStake}
+                  style={{ width: "100%", padding: "8px 10px", background: "rgba(0,0,0,0.2)", border: `1px solid ${T.cardBorder}`, borderRadius: 4, color: T.text, fontSize: 14, fontFamily: "monospace" }} />
+              </div>
+              {stakeNum > 0 && (
+                <div style={{ fontSize: 11, color: T.textMuted, textAlign: "center", minWidth: 80 }}>
+                  Win: <strong style={{ color: T.green }}>+{payout}</strong>
+                </div>
+              )}
+              <button onClick={() => { if (stakeNum > 0 && pick) { onPlace(pick, stakeNum); setPick(null); setStake(""); } }}
+                disabled={stakeNum <= 0}
+                style={{
+                  padding: "8px 16px", background: stakeNum > 0 ? "#ff6666" : "rgba(255,255,255,0.1)",
+                  color: stakeNum > 0 ? "#fff" : T.textFaint, border: "none", borderRadius: 4,
+                  cursor: stakeNum > 0 ? "pointer" : "default", fontSize: 13, fontWeight: 600,
+                }}>Stake</button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function SeasonStandings({ league, theme: T, tournaments }) {
+      const [standings, setStandings] = useState([]);
+      const [loadingStandings, setLoadingStandings] = useState(true);
+
+      useEffect(() => {
+        if (!league || !tournaments?.length) return;
+        
+        const loadAll = async () => {
+          setLoadingStandings(true);
+          const teamTotals = {}; // { teamName: { scores: [per tournament], total: 0, owner: "" } }
+
+          for (let i = 0; i < tournaments.length; i++) {
+            const prefix = `pool-${league.id}_t${i}-`;
+            try {
+              const snap = await fbDb.ref(`${prefix}gp-teams-v5`).once("value");
+              const teams = snap.val();
+              if (!teams) continue;
+
+              // For each team, we need their score from this tournament
+              // The score comes from the cached snapshot if available
+              const snapData = await fbDb.ref(`${prefix}gp-snap-v5`).once("value");
+              const snapshot = snapData.val();
+
+              for (const [name, data] of Object.entries(teams)) {
+                if (!teamTotals[name]) {
+                  teamTotals[name] = { scores: new Array(tournaments.length).fill(null), total: 0, owner: data.owner || "" };
+                }
+                // If we have a snapshot with computed scores, use that
+                if (snapshot && snapshot.leaderboard) {
+                  const lb = Array.isArray(snapshot.leaderboard) ? snapshot.leaderboard : Object.values(snapshot.leaderboard);
+                  const entry = lb.find(e => e.name === name);
+                  if (entry && entry.teamTotal != null) {
+                    teamTotals[name].scores[i] = entry.teamTotal;
+                    teamTotals[name].total += entry.teamTotal;
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn(`Failed to load tournament ${i}:`, e);
+            }
+          }
+
+          const sorted = Object.entries(teamTotals)
+            .map(([name, data]) => ({ name, ...data }))
+            .sort((a, b) => a.total - b.total);
+
+          setStandings(sorted);
+          setLoadingStandings(false);
+        };
+
+        loadAll();
+      }, [league, tournaments]);
+
+      const fmt = v => v == null ? "–" : (v > 0 ? `+${v}` : v === 0 ? "E" : v);
+
+      return (
+        <div style={{ maxWidth:800, margin:"0 auto", padding:"30px 20px" }}>
+          <h2 style={{ color:T.accent, fontSize:"20px", letterSpacing:3, textAlign:"center", marginBottom:24, textTransform:"uppercase" }}>Season Standings</h2>
+          
+          {loadingStandings ? (
+            <p style={{ textAlign:"center", color:T.textMuted }}>Loading standings...</p>
+          ) : standings.length === 0 ? (
+            <p style={{ textAlign:"center", color:T.textMuted }}>No scores yet. Complete a tournament to see standings.</p>
+          ) : (
+            <div>
+              {/* Header */}
+              <div style={{ display:"flex", padding:"8px 12px", fontSize:"10px", letterSpacing:2, textTransform:"uppercase", color:T.accentLight, fontWeight:600, borderBottom:`2px solid ${T.accentFaint}`, background:"rgba(0,0,0,0.2)" }}>
+                <span style={{ width:36, textAlign:"center" }}>POS</span>
+                <span style={{ flex:1, paddingLeft:8 }}>TEAM</span>
+                {tournaments.map((t, i) => (
+                  <span key={i} style={{ width:60, textAlign:"center", fontSize:"8px" }}>
+                    {(t.name || `E${i+1}`).substring(0, 6).toUpperCase()}
+                  </span>
+                ))}
+                <span style={{ width:70, textAlign:"center", fontWeight:700 }}>TOTAL</span>
+              </div>
+
+              {/* Rows */}
+              {standings.map((team, idx) => {
+                const pos = idx + 1;
+                const medal = pos <= 3 ? ["🏆","🥈","🥉"][pos-1] : pos;
+                return (
+                  <div key={team.name} style={{
+                    display:"flex", alignItems:"center", padding:"10px 12px",
+                    borderBottom:`1px solid ${T.accentFaint}`,
+                    background: idx % 2 === 0 ? "rgba(0,0,0,0.1)" : "transparent",
+                  }}>
+                    <span style={{ width:36, textAlign:"center", fontSize: pos <= 3 ? "16px" : "13px", color: pos <= 3 ? T.accent : T.textMuted }}>{medal}</span>
+                    <div style={{ flex:1, paddingLeft:8 }}>
+                      <span style={{ fontSize:"13px", fontWeight: pos <= 3 ? 700 : 400, color: pos <= 3 ? T.accent : T.text, letterSpacing:1 }}>{team.name.toUpperCase()}</span>
+                      {team.owner && <span style={{ fontSize:"10px", color:T.textFaint, marginLeft:6 }}>{team.owner}</span>}
+                    </div>
+                    {team.scores.map((s, i) => (
+                      <span key={i} style={{ width:60, textAlign:"center", fontSize:"12px", fontFamily:"monospace",
+                        color: s == null ? T.textFaint : s < 0 ? T.red : s > 0 ? T.green : T.textMuted
+                      }}>{fmt(s)}</span>
+                    ))}
+                    <span style={{ width:70, textAlign:"center", fontSize:"16px", fontWeight:700, fontFamily:"monospace",
+                      color: team.total < 0 ? T.red : team.total > 0 ? T.green : T.accent
+                    }}>{fmt(team.total)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function SharedLeagueLoader({ sharedLeagueId, onLoaded, onLogin }) {
       const [error, setError] = useState(null);
 
