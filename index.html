@@ -4443,8 +4443,14 @@
         theme: "clubhouse", logoUrl: "",
         leagueType: "single", // "single" or "season"
         seasonTournaments: [], // [{name, lockDate}] for season-long
+        seasonPreset: null, // "majors", "signature", "custom"
         noRepeatPicks: true, // can't pick same golfer twice in a season
         maxTradesPerEvent: 0, // 0 = full new team each tournament
+        // Season fee structure
+        seasonEntryFee: 50, // total fee for the season
+        perEventFee: 20, // portion that goes to each event's prize pool
+        // F1-style points (index = position - 1)
+        seasonPoints: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1],
       });
 
       const createLeague = async () => {
@@ -4480,7 +4486,10 @@
           seasonTournaments: leagueForm.leagueType === "season" ? leagueForm.seasonTournaments : [],
           noRepeatPicks: leagueForm.noRepeatPicks,
           maxTradesPerEvent: Number(leagueForm.maxTradesPerEvent) || 0,
-          currentTournamentIdx: 0, // index into seasonTournaments
+          currentTournamentIdx: 0,
+          seasonEntryFee: leagueForm.leagueType === "season" ? Number(leagueForm.seasonEntryFee) || 50 : null,
+          perEventFee: leagueForm.leagueType === "season" ? Number(leagueForm.perEventFee) || 20 : null,
+          seasonPoints: leagueForm.leagueType === "season" ? leagueForm.seasonPoints : null,
         };
         await fbDb.ref(`users/${user.uid}/leagues/${leagueId}`).set(leagueData);
         // Also store in global leagues index for discoverability later
@@ -4489,7 +4498,7 @@
           sport: leagueData.sport, ownerId: user.uid, createdAt: Date.now(),
         });
         setShowCreateLeague(false);
-        setLeagueForm({ name: "", tournament: "", sport: "golf", entryFee: 20, adminFee: 0, payoutSplit: "60/30/10", customPayout: "", venmoUsername: "", maxPlayers: 20, lockDate: "", lockTime: "", tiers: "4", picksPerTeam: 10, bestOf: 5, theme: "clubhouse", logoUrl: "", leagueType: "single", seasonTournaments: [], noRepeatPicks: true, maxTradesPerEvent: 0 });
+        setLeagueForm({ name: "", tournament: "", sport: "golf", entryFee: 20, adminFee: 0, payoutSplit: "60/30/10", customPayout: "", venmoUsername: "", maxPlayers: 20, lockDate: "", lockTime: "", tiers: "4", picksPerTeam: 10, bestOf: 5, theme: "clubhouse", logoUrl: "", leagueType: "single", seasonTournaments: [], seasonPreset: null, noRepeatPicks: true, maxTradesPerEvent: 0, seasonEntryFee: 50, perEventFee: 20, seasonPoints: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1] });
         loadLeagues();
       };
 
@@ -4732,30 +4741,35 @@
                       
                       {/* Preset buttons */}
                       <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
-                        <button onClick={() => setLeagueForm({...leagueForm, seasonTournaments: [
-                          { name: "The Masters", lockDate: "2026-04-09T08:00" },
-                          { name: "PGA Championship", lockDate: "2026-05-14T08:00" },
-                          { name: "U.S. Open", lockDate: "2026-06-18T08:00" },
-                          { name: "The Open Championship", lockDate: "2026-07-16T08:00" },
-                        ]})} style={{ padding:"8px 14px", borderRadius:6, border:"2px solid rgba(212,175,55,0.4)", background:"rgba(212,175,55,0.08)", color:"#d4af37", cursor:"pointer", fontSize:"12px", fontWeight:600 }}>
-                          ⛳ Majors Only (4)
-                        </button>
-                        <button onClick={() => setLeagueForm({...leagueForm, seasonTournaments: [
-                          { name: "The Players Championship", lockDate: "2026-03-12T08:00" },
-                          { name: "The Masters", lockDate: "2026-04-09T08:00" },
-                          { name: "PGA Championship", lockDate: "2026-05-14T08:00" },
-                          { name: "The Memorial", lockDate: "2026-06-04T08:00" },
-                          { name: "U.S. Open", lockDate: "2026-06-18T08:00" },
-                          { name: "The Open Championship", lockDate: "2026-07-16T08:00" },
-                          { name: "FedEx St. Jude Championship", lockDate: "2026-08-13T08:00" },
-                          { name: "Tour Championship", lockDate: "2026-08-27T08:00" },
-                        ]})} style={{ padding:"8px 14px", borderRadius:6, border:"1px solid rgba(212,175,55,0.2)", background:"transparent", color:"rgba(212,175,55,0.6)", cursor:"pointer", fontSize:"12px" }}>
-                          Signature Events (8)
-                        </button>
-                        <button onClick={() => setLeagueForm({...leagueForm, seasonTournaments: []})}
-                          style={{ padding:"8px 14px", borderRadius:6, border:"1px solid rgba(255,255,255,0.1)", background:"transparent", color:"rgba(255,255,255,0.4)", cursor:"pointer", fontSize:"12px" }}>
-                          Custom
-                        </button>
+                        {[
+                          { key: "majors", label: "⛳ Majors Only (4)", tournaments: [
+                            { name: "The Masters", lockDate: "2026-04-09T08:00" },
+                            { name: "PGA Championship", lockDate: "2026-05-14T08:00" },
+                            { name: "U.S. Open", lockDate: "2026-06-18T08:00" },
+                            { name: "The Open Championship", lockDate: "2026-07-16T08:00" },
+                          ]},
+                          { key: "signature", label: "Signature Events (8)", tournaments: [
+                            { name: "The Players Championship", lockDate: "2026-03-12T08:00" },
+                            { name: "The Masters", lockDate: "2026-04-09T08:00" },
+                            { name: "PGA Championship", lockDate: "2026-05-14T08:00" },
+                            { name: "The Memorial", lockDate: "2026-06-04T08:00" },
+                            { name: "U.S. Open", lockDate: "2026-06-18T08:00" },
+                            { name: "The Open Championship", lockDate: "2026-07-16T08:00" },
+                            { name: "FedEx St. Jude Championship", lockDate: "2026-08-13T08:00" },
+                            { name: "Tour Championship", lockDate: "2026-08-27T08:00" },
+                          ]},
+                          { key: "custom", label: "Custom", tournaments: [] },
+                        ].map(preset => (
+                          <button key={preset.key} onClick={() => setLeagueForm({...leagueForm, seasonTournaments: preset.tournaments, seasonPreset: preset.key})}
+                            style={{
+                              padding:"8px 14px", borderRadius:6, cursor:"pointer", fontSize:"12px", fontWeight:600,
+                              border: leagueForm.seasonPreset === preset.key ? "2px solid #d4af37" : "1px solid rgba(212,175,55,0.2)",
+                              background: leagueForm.seasonPreset === preset.key ? "rgba(212,175,55,0.12)" : "transparent",
+                              color: leagueForm.seasonPreset === preset.key ? "#d4af37" : "rgba(212,175,55,0.5)",
+                            }}>
+                            {preset.label}
+                          </button>
+                        ))}
                       </div>
 
                       <p style={{ fontSize:"11px", color:"rgba(255,255,255,0.3)", marginBottom:8 }}>
@@ -4808,6 +4822,97 @@
                             <option value="3">Up to 3 swaps per event</option>
                             <option value="5">Up to 5 swaps per event</option>
                           </select>
+                        </div>
+                      </div>
+
+                      {/* Season Fee Structure */}
+                      <div style={{ marginTop:12, padding:16, background:"rgba(255,255,255,0.02)", borderRadius:8, border:"1px solid rgba(212,175,55,0.1)" }}>
+                        <label style={{ ...S_DASH.label, marginBottom:8 }}>Season Fee Structure</label>
+                        <p style={{ fontSize:11, color:"rgba(255,255,255,0.3)", marginBottom:10, lineHeight:1.6 }}>
+                          Players pay a first-tournament fee (which includes the season championship buy-in), then a smaller per-event fee for each subsequent tournament.
+                        </p>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                          <div>
+                            <label style={S_DASH.label}>First Tournament Fee ($)</label>
+                            <input style={S_DASH.input} type="number" value={leagueForm.seasonEntryFee}
+                              onChange={e => setLeagueForm({...leagueForm, seasonEntryFee: e.target.value})} />
+                            <p style={{ fontSize:9, color:"rgba(255,255,255,0.25)", marginTop:-6 }}>Includes season buy-in + first event</p>
+                          </div>
+                          <div>
+                            <label style={S_DASH.label}>Per-Event Fee ($)</label>
+                            <input style={S_DASH.input} type="number" value={leagueForm.perEventFee}
+                              onChange={e => setLeagueForm({...leagueForm, perEventFee: e.target.value})} />
+                            <p style={{ fontSize:9, color:"rgba(255,255,255,0.25)", marginTop:-6 }}>Tournaments 2, 3, 4, etc.</p>
+                          </div>
+                        </div>
+                        {leagueForm.seasonTournaments.length > 0 && (() => {
+                          const numEvents = leagueForm.seasonTournaments.length;
+                          const firstFee = Number(leagueForm.seasonEntryFee) || 0;
+                          const perEvent = Number(leagueForm.perEventFee) || 0;
+                          const seasonBuyIn = firstFee - perEvent;
+                          const totalPerPlayer = firstFee + (perEvent * (numEvents - 1));
+                          const totalEventPots = perEvent * numEvents;
+                          return (
+                            <div style={{ marginTop:10, padding:10, background:"rgba(0,0,0,0.15)", borderRadius:6, fontSize:12, color:"rgba(255,255,255,0.5)", lineHeight:1.8 }}>
+                              <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)", letterSpacing:1, marginBottom:4, textTransform:"uppercase" }}>Per-Player Breakdown</div>
+                              <div style={{ display:"flex", justifyContent:"space-between" }}>
+                                <span>Tournament 1 fee:</span>
+                                <span style={{ fontFamily:"monospace" }}>{"$" + firstFee}</span>
+                              </div>
+                              <div style={{ display:"flex", justifyContent:"space-between" }}>
+                                <span>Tournaments 2–{numEvents} ({numEvents - 1} × {"$" + perEvent}):</span>
+                                <span style={{ fontFamily:"monospace" }}>{"$" + (perEvent * (numEvents - 1))}</span>
+                              </div>
+                              <div style={{ display:"flex", justifyContent:"space-between", borderTop:"1px solid rgba(255,255,255,0.1)", paddingTop:4, marginTop:4 }}>
+                                <span style={{ fontWeight:600 }}>Total per player:</span>
+                                <span style={{ fontWeight:700, fontFamily:"monospace", color:"#d4af37" }}>{"$" + totalPerPlayer}</span>
+                              </div>
+                              <div style={{ marginTop:8, fontSize:10, color:"rgba(255,255,255,0.3)", letterSpacing:1, textTransform:"uppercase" }}>Prize Pool Breakdown</div>
+                              <div style={{ display:"flex", justifyContent:"space-between" }}>
+                                <span>Each event pot (×{numEvents}):</span>
+                                <span style={{ fontFamily:"monospace" }}>{"$" + perEvent} per event</span>
+                              </div>
+                              <div style={{ display:"flex", justifyContent:"space-between", borderTop:"1px solid rgba(255,255,255,0.1)", paddingTop:4, marginTop:4 }}>
+                                <span style={{ fontWeight:600, color: seasonBuyIn >= 0 ? "#d4af37" : "#ff6666" }}>Season championship pot:</span>
+                                <span style={{ fontWeight:700, fontFamily:"monospace", color: seasonBuyIn >= 0 ? "#d4af37" : "#ff6666" }}>{"$" + seasonBuyIn} per player</span>
+                              </div>
+                              {seasonBuyIn <= 0 && <div style={{ color:"#ff6666", fontSize:11, marginTop:4 }}>⚠ First tournament fee must be higher than per-event fee to fund the season pot.</div>}
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* F1-Style Season Points */}
+                      <div style={{ marginTop:12, padding:16, background:"rgba(255,255,255,0.02)", borderRadius:8, border:"1px solid rgba(212,175,55,0.1)" }}>
+                        <label style={{ ...S_DASH.label, marginBottom:8 }}>Season Points (per tournament finish)</label>
+                        <p style={{ fontSize:11, color:"rgba(255,255,255,0.3)", marginBottom:10, lineHeight:1.6 }}>
+                          Points awarded by finish position in each tournament. These accumulate across the season and can be staked on prop bets.
+                        </p>
+                        <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                          {leagueForm.seasonPoints.map((pts, i) => (
+                            <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
+                              <span style={{ fontSize:9, color:"rgba(255,255,255,0.3)" }}>{i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i+1}th`}</span>
+                              <input type="number" value={pts}
+                                onChange={e => {
+                                  const arr = [...leagueForm.seasonPoints];
+                                  arr[i] = Number(e.target.value) || 0;
+                                  setLeagueForm({...leagueForm, seasonPoints: arr});
+                                }}
+                                style={{ width:42, padding:"4px 2px", textAlign:"center", background:"rgba(0,0,0,0.2)", border:"1px solid rgba(212,175,55,0.15)", borderRadius:4, color:"#d4af37", fontSize:13, fontFamily:"monospace" }} />
+                            </div>
+                          ))}
+                          <button onClick={() => setLeagueForm({...leagueForm, seasonPoints: [...leagueForm.seasonPoints, 0]})}
+                            style={{ alignSelf:"flex-end", padding:"4px 8px", background:"none", border:"1px solid rgba(212,175,55,0.15)", borderRadius:4, color:"rgba(212,175,55,0.4)", cursor:"pointer", fontSize:14 }}>+</button>
+                        </div>
+                        <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                          <button onClick={() => setLeagueForm({...leagueForm, seasonPoints: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]})}
+                            style={{ fontSize:10, padding:"4px 10px", background:"none", border:"1px solid rgba(212,175,55,0.15)", borderRadius:4, color:"rgba(212,175,55,0.5)", cursor:"pointer" }}>F1 Race</button>
+                          <button onClick={() => setLeagueForm({...leagueForm, seasonPoints: [8, 7, 6, 5, 4, 3, 2, 1]})}
+                            style={{ fontSize:10, padding:"4px 10px", background:"none", border:"1px solid rgba(212,175,55,0.15)", borderRadius:4, color:"rgba(212,175,55,0.5)", cursor:"pointer" }}>F1 Sprint</button>
+                          <button onClick={() => setLeagueForm({...leagueForm, seasonPoints: [10, 8, 6, 5, 4, 3, 2, 1]})}
+                            style={{ fontSize:10, padding:"4px 10px", background:"none", border:"1px solid rgba(212,175,55,0.15)", borderRadius:4, color:"rgba(212,175,55,0.5)", cursor:"pointer" }}>Top 8</button>
+                          <button onClick={() => setLeagueForm({...leagueForm, seasonPoints: [5, 3, 1]})}
+                            style={{ fontSize:10, padding:"4px 10px", background:"none", border:"1px solid rgba(212,175,55,0.15)", borderRadius:4, color:"rgba(212,175,55,0.5)", cursor:"pointer" }}>Podium Only</button>
                         </div>
                       </div>
                     </div>
