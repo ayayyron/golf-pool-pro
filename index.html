@@ -5212,13 +5212,15 @@
         );
       }
 
+      // Season view state (must be before any conditional returns)
+      const [seasonView, setSeasonView] = useState("current");
+      const [activeTournamentIdx, setActiveTournamentIdx] = useState(0);
+
       // ====================== POOL / SEASON VIEW ======================
       if (currentView === "pool" && selectedLeague) {
         const T = THEMES[selectedLeague.theme] || THEMES.clubhouse;
         const isSeason = selectedLeague.leagueType === "season";
         const tournaments = selectedLeague.seasonTournaments || [];
-        const [seasonView, setSeasonView] = useState("current"); // "current", "standings", "schedule"
-        const [activeTournamentIdx, setActiveTournamentIdx] = useState(selectedLeague.currentTournamentIdx || 0);
 
         // For season leagues, build config for the current tournament
         const currentTournament = isSeason ? tournaments[activeTournamentIdx] : null;
