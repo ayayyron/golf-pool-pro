@@ -4428,6 +4428,8 @@
       const [subscription, setSubscription] = useState(null);
       const [sharedLeagueId, setSharedLeagueId] = useState(null);
       const [tvMode, setTvMode] = useState(false);
+      const [seasonView, setSeasonView] = useState("current");
+      const [activeTournamentIdx, setActiveTournamentIdx] = useState(0);
 
       // Check for shared league URL on mount: ?league=league_123&owner=uid&display=tv
       useEffect(() => {
@@ -5211,10 +5213,6 @@
           </div>
         );
       }
-
-      // Season view state (must be before any conditional returns)
-      const [seasonView, setSeasonView] = useState("current");
-      const [activeTournamentIdx, setActiveTournamentIdx] = useState(0);
 
       // ====================== POOL / SEASON VIEW ======================
       if (currentView === "pool" && selectedLeague) {
