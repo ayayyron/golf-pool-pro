@@ -4427,14 +4427,19 @@
       const [selectedTier, setSelectedTier] = useState(null);
       const [subscription, setSubscription] = useState(null);
       const [sharedLeagueId, setSharedLeagueId] = useState(null);
+      const [tvMode, setTvMode] = useState(false);
 
-      // Check for shared league URL on mount: ?league=league_123&owner=uid
+      // Check for shared league URL on mount: ?league=league_123&owner=uid&display=tv
       useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const leagueParam = params.get("league");
         const ownerParam = params.get("owner");
+        const displayParam = params.get("display");
         if (leagueParam && ownerParam) {
           setSharedLeagueId({ id: leagueParam, ownerId: ownerParam });
+        }
+        if (displayParam === "tv") {
+          setTvMode(true);
         }
       }, []);
 
@@ -4620,12 +4625,27 @@
 
       // If shared league is loaded, show it directly (even without login)
       if (sharedLeagueId && selectedLeague && currentView === "pool") {
+        // TV / Clubhouse display mode
+        if (tvMode) {
+          return <ClubhouseTV league={selectedLeague} leagueId={selectedLeague.id} />;
+        }
         const T = THEMES[selectedLeague.theme] || THEMES.clubhouse;
         return (
           <div style={{ minHeight:"100vh", background: T.bg, fontFamily:"'Playfair Display',Georgia,serif" }}>
             <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:1000, background: T.navBg, padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:`1px solid ${T.accentFaint}` }}>
               <span style={{ color:T.accent, fontSize:"14px", fontWeight:700, letterSpacing:2 }}>{selectedLeague.name}</span>
               <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                <button onClick={() => {
+                  const params = new URLSearchParams(window.location.search);
+                  params.set("display", "tv");
+                  const tvUrl = `${window.location.origin}?${params.toString()}`;
+                  if (window.confirm("Switch to TV Display Mode?\n\nThis fills the screen with a large-format leaderboard optimized for TVs. Perfect for a clubhouse or mancave.\n\nYou can also copy this link to open on another device.")) {
+                    navigator.clipboard.writeText(tvUrl).catch(() => {});
+                    setTvMode(true);
+                  }
+                }} style={{ padding:"6px 10px", background:"transparent", border:`1px solid ${T.accentFaint}`, color:T.accentLight, borderRadius:"4px", cursor:"pointer", fontSize:"11px" }}>
+                  📺
+                </button>
                 {selectedLeague.logoUrl && <img src={selectedLeague.logoUrl} alt="Logo" style={{ height:28, borderRadius:4 }} />}
                 {!user && (
                   <button onClick={() => { setSharedLeagueId(null); setSelectedLeague(null); setCurrentView("login"); }}
@@ -4726,7 +4746,7 @@
                         )}
                       </p>
                     </div>
-                    <div style={{ display:"flex", gap:8 }}>
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                       <button onClick={() => openLeague(l)} style={S_DASH.btn}>Open →</button>
                       <button onClick={() => {
                         const url = `${window.location.origin}?league=${l.id}&owner=${user.uid}`;
@@ -4734,6 +4754,14 @@
                           window.prompt("Copy this link:", url);
                         });
                       }} style={S_DASH.btnOutline}>Share</button>
+                      {isElite && (
+                        <button onClick={() => {
+                          const url = `${window.location.origin}?league=${l.id}&owner=${user.uid}&display=tv`;
+                          navigator.clipboard.writeText(url).then(() => alert("TV Display link copied!\n\nOpen this on a laptop connected to your TV:\n" + url)).catch(() => {
+                            window.prompt("TV Display link:", url);
+                          });
+                        }} style={{ ...S_DASH.btnOutline, borderColor:"rgba(255,100,100,0.3)", color:"#ff6666" }}>📺 TV</button>
+                      )}
                       <button onClick={() => deleteLeague(l.id)} style={S_DASH.btnDanger}>Delete</button>
                     </div>
                   </div>
@@ -5216,6 +5244,14 @@
               </button>
               <span style={{ color:T.accent, fontSize:"14px", fontWeight:700, letterSpacing:2 }}>{selectedLeague.name}</span>
               <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                <button onClick={() => {
+                  const tvUrl = `${window.location.origin}?league=${selectedLeague.id}&owner=${user.uid}&display=tv`;
+                  navigator.clipboard.writeText(tvUrl).then(() => alert("TV Display link copied!\n\n" + tvUrl)).catch(() => {
+                    window.prompt("TV Display link:", tvUrl);
+                  });
+                }} style={{ padding:"5px 10px", background:"transparent", border:`1px solid ${T.accentFaint}`, color:T.accentLight, borderRadius:"4px", cursor:"pointer", fontSize:"11px" }}>
+                  📺
+                </button>
                 {selectedLeague.logoUrl && <img src={selectedLeague.logoUrl} alt="Logo" style={{ height:28, borderRadius:4 }} />}
               </div>
             </div>
@@ -5871,6 +5907,214 @@
               })}
             </div>
           )}
+        </div>
+      );
+    }
+
+    // ====================== CLUBHOUSE TV MODE (Elite) ======================
+    // Full-screen display optimized for TVs — auto-cycles between views
+    function ClubhouseTV({ league, leagueId }) {
+      const T = THEMES[league.theme] || THEMES.clubhouse;
+      const [tvView, setTvView] = useState("pool"); // pool, tournament, weather
+      const [teams, setTeams] = useState({});
+      const [liveScores, setLiveScores] = useState({});
+      const [tName, setTName] = useState("");
+      const [weather, setWeather] = useState(null);
+      const [cycleIdx, setCycleIdx] = useState(0);
+      const views = ["pool", "tournament"];
+
+      // Auto-cycle every 20 seconds
+      useEffect(() => {
+        const interval = setInterval(() => {
+          setCycleIdx(prev => {
+            const next = (prev + 1) % views.length;
+            setTvView(views[next]);
+            return next;
+          });
+        }, 20000);
+        return () => clearInterval(interval);
+      }, []);
+
+      // Auto-reload page every 30 minutes to prevent browser sleep
+      useEffect(() => {
+        const reload = setInterval(() => window.location.reload(), 1800000);
+        return () => clearInterval(reload);
+      }, []);
+
+      // Load data
+      useEffect(() => {
+        if (!fbDb) return;
+        const prefix = `pool-${leagueId}-`;
+        
+        // Load teams
+        fbDb.ref(`${prefix}gp-teams-v5`).on("value", snap => {
+          setTeams(snap.val() || {});
+        });
+
+        // Load scores from ESPN
+        const fetchScores = async () => {
+          try {
+            const resp = await fetch("https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard");
+            if (resp.ok) {
+              const data = await resp.json();
+              const event = data.events?.[0];
+              if (event) {
+                setTName(event.name || "");
+                const scores = {};
+                const competitors = event.competitions?.[0]?.competitors || [];
+                competitors.forEach(c => {
+                  const name = c.athlete?.displayName || "";
+                  scores[name.toLowerCase()] = {
+                    toPar: parseInt(c.score) || 0,
+                    today: parseInt(c.linescores?.slice(-1)?.[0]?.value) || 0,
+                    pos: c.status?.position?.displayName || "",
+                  };
+                });
+                setLiveScores(scores);
+              }
+            }
+          } catch {}
+        };
+        fetchScores();
+        const scoreInterval = setInterval(fetchScores, 60000);
+        return () => clearInterval(scoreInterval);
+      }, [leagueId]);
+
+      // Build pool leaderboard
+      const lb = useMemo(() => {
+        return Object.entries(teams).map(([name, data]) => {
+          const picks = data.picks || [];
+          const scores = picks.map(p => {
+            const s = liveScores[p.toLowerCase()];
+            return s ? s.toPar : 0;
+          }).sort((a, b) => a - b);
+          const best5 = scores.slice(0, 5);
+          const total = best5.reduce((a, b) => a + b, 0);
+          return { name, owner: data.owner, total };
+        }).sort((a, b) => a.total - b.total);
+      }, [teams, liveScores]);
+
+      // Build tournament leaderboard
+      const tourneyLb = useMemo(() => {
+        return Object.entries(liveScores)
+          .map(([name, s]) => ({ name, ...s }))
+          .sort((a, b) => a.toPar - b.toPar)
+          .slice(0, 20);
+      }, [liveScores]);
+
+      const fmt = v => v == null ? "E" : v > 0 ? `+${v}` : v === 0 ? "E" : v;
+      const clr = v => v < 0 ? T.red : v === 0 ? T.accent : T.green;
+
+      return (
+        <div style={{
+          minHeight: "100vh", background: T.bg, fontFamily: "'Playfair Display',Georgia,serif",
+          color: T.text, overflow: "hidden",
+        }}>
+          {/* Header bar */}
+          <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "20px 40px", borderBottom: `2px solid ${T.accentFaint}`,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              {league.logoUrl && <img src={league.logoUrl} alt="" style={{ height: 48, borderRadius: 6 }} />}
+              <div>
+                <div style={{ fontSize: 32, fontWeight: 700, color: T.accent, letterSpacing: 3 }}>{league.name}</div>
+                <div style={{ fontSize: 16, color: T.textMuted, letterSpacing: 2 }}>{tName || league.tournament}</div>
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 14, color: T.textFaint, letterSpacing: 1 }}>LIVE</div>
+              <div style={{ fontSize: 12, color: T.accent }}>{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+              <div style={{
+                marginTop: 6, display: "flex", gap: 6,
+              }}>
+                {views.map((v, i) => (
+                  <div key={v} style={{
+                    width: 8, height: 8, borderRadius: "50%",
+                    background: cycleIdx === i ? T.accent : T.accentFaint,
+                  }} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Pool Leaderboard */}
+          {tvView === "pool" && (
+            <div style={{ padding: "30px 40px" }}>
+              <h2 style={{ fontSize: 22, letterSpacing: 4, color: T.accentLight, textTransform: "uppercase", marginBottom: 20, textAlign: "center" }}>
+                POOL STANDINGS
+              </h2>
+              <div style={{ maxWidth: 900, margin: "0 auto" }}>
+                {/* Header */}
+                <div style={{ display: "flex", padding: "12px 20px", fontSize: 14, letterSpacing: 2, textTransform: "uppercase", color: T.accentLight, fontWeight: 600, borderBottom: `2px solid ${T.accentFaint}` }}>
+                  <span style={{ width: 60, textAlign: "center" }}>POS</span>
+                  <span style={{ flex: 1 }}>TEAM</span>
+                  <span style={{ width: 120, textAlign: "center" }}>TOTAL</span>
+                </div>
+                {lb.map((team, idx) => {
+                  const pos = idx + 1;
+                  const medal = pos <= 3 ? ["🏆", "🥈", "🥉"][pos - 1] : pos;
+                  return (
+                    <div key={team.name} style={{
+                      display: "flex", alignItems: "center", padding: "16px 20px",
+                      borderBottom: `1px solid ${T.accentFaint}`,
+                      background: idx % 2 === 0 ? "rgba(0,0,0,0.1)" : "transparent",
+                    }}>
+                      <span style={{ width: 60, textAlign: "center", fontSize: pos <= 3 ? 28 : 20, color: pos <= 3 ? T.accent : T.textMuted }}>{medal}</span>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: 22, fontWeight: pos <= 3 ? 700 : 400, color: pos <= 3 ? T.accent : T.text, letterSpacing: 2 }}>
+                          {team.name.toUpperCase()}
+                        </span>
+                        {team.owner && <span style={{ fontSize: 14, color: T.textFaint, marginLeft: 12 }}>{team.owner}</span>}
+                      </div>
+                      <span style={{ width: 120, textAlign: "center", fontSize: 28, fontWeight: 700, fontFamily: "monospace", color: clr(team.total) }}>
+                        {fmt(team.total)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Tournament Leaderboard */}
+          {tvView === "tournament" && (
+            <div style={{ padding: "30px 40px" }}>
+              <h2 style={{ fontSize: 22, letterSpacing: 4, color: T.accentLight, textTransform: "uppercase", marginBottom: 20, textAlign: "center" }}>
+                {tName || "TOURNAMENT"} LEADERBOARD
+              </h2>
+              <div style={{ maxWidth: 900, margin: "0 auto" }}>
+                <div style={{ display: "flex", padding: "12px 20px", fontSize: 14, letterSpacing: 2, textTransform: "uppercase", color: T.accentLight, fontWeight: 600, borderBottom: `2px solid ${T.accentFaint}` }}>
+                  <span style={{ width: 60, textAlign: "center" }}>POS</span>
+                  <span style={{ flex: 1 }}>PLAYER</span>
+                  <span style={{ width: 120, textAlign: "center" }}>TOTAL</span>
+                </div>
+                {tourneyLb.map((g, idx) => (
+                  <div key={g.name} style={{
+                    display: "flex", alignItems: "center", padding: "14px 20px",
+                    borderBottom: `1px solid ${T.accentFaint}`,
+                    background: idx % 2 === 0 ? "rgba(0,0,0,0.1)" : "transparent",
+                  }}>
+                    <span style={{ width: 60, textAlign: "center", fontSize: 18, color: idx < 3 ? T.accent : T.textMuted }}>{g.pos || idx + 1}</span>
+                    <span style={{ flex: 1, fontSize: 20, color: T.text }}>{g.name}</span>
+                    <span style={{ width: 120, textAlign: "center", fontSize: 24, fontWeight: 700, fontFamily: "monospace", color: clr(g.toPar) }}>
+                      {fmt(g.toPar)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div style={{
+            position: "fixed", bottom: 0, left: 0, right: 0,
+            padding: "12px 40px", display: "flex", justifyContent: "space-between", alignItems: "center",
+            background: T.navBg, borderTop: `1px solid ${T.accentFaint}`,
+          }}>
+            <span style={{ fontSize: 14, color: T.textFaint, letterSpacing: 2 }}>POWERED BY POOLSIDE</span>
+            <span style={{ fontSize: 12, color: T.textFaint }}>Scores update every 60 seconds</span>
+          </div>
         </div>
       );
     }
