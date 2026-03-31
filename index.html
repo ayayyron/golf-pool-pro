@@ -1202,7 +1202,7 @@
       );
     }
     
-    function GolfPool({ leagueTheme, leagueConfig, leagueId, isPro: _isPro, isElite: _isElite, onUpgrade }) {
+    function GolfPool({ leagueTheme, leagueConfig, leagueId, isPro: _isPro, isElite: _isElite, onUpgrade, isLeagueOwner }) {
       // Default to true for shared links (no subscription context) so participants see the pool
       const isPro = _isPro !== false;
       const isElite = _isElite === true;
@@ -1266,6 +1266,13 @@
           };
           if (tierDefs[numTiers]) base.TIERS = tierDefs[numTiers];
         }
+        // Open draft mode — no tiers, just pick any N golfers
+        if (LC.useTiers === false) {
+          base.USE_TIERS = false;
+          base.TIERS = [{ label: "All Golfers", picks: base.PICKS, range: [1, Infinity], desc: "Pick any golfer" }];
+        } else {
+          base.USE_TIERS = true;
+        }
         if (LC.lockDate) base.LOCK_TIME = new Date(LC.lockDate).getTime();
         if (LC.tournament) base.TARGET_TOURNAMENT = LC.tournament;
         // Use league-specific Firebase path for data isolation
@@ -1302,8 +1309,8 @@
       const [weather, setWeather] = useState(null);
     
       // ── Admin ─────────────────────────────────────────────────
-      const [isAdmin, setIsAdmin] = useState(false);
-      const [adminInput, setAdminInput] = useState("");
+      // Admin is determined by league ownership, not a password
+      const isAdmin = isLeagueOwner === true;
       const [adminErr, setAdminErr] = useState("");
       const [showAdminTeam, setShowAdminTeam] = useState(false);
       const [targetTournament, setTargetTournament] = useState(""); // admin-set tournament name for registration
@@ -1326,13 +1333,19 @@
       const [rName, setRName] = useState("");
       const [rEmail, setREmail] = useState("");
       const [rOwner, setROwner] = useState("");
-      const [tierPicks, setTierPicks] = useState(CFG.TIERS.map(() => []));
+      const [tierPicks, setTierPicks] = useState(LLCFG.TIERS.map(() => []));
       const [rErr, setRErr] = useState("");
       const [editLookupEmail, setEditLookupEmail] = useState("");
       const [editMatchedTeam, setEditMatchedTeam] = useState(null); // team name found by email
       const [rOk, setROk] = useState("");
       const [rTiebreaker, setRTiebreaker] = useState(""); // prediction of winning score
-      const [searches, setSearches] = useState(CFG.TIERS.map(() => ""));
+      const [searches, setSearches] = useState(LLCFG.TIERS.map(() => ""));
+
+      // Reset picks when tier config changes
+      useEffect(() => {
+        setTierPicks(LLCFG.TIERS.map(() => []));
+        setSearches(LLCFG.TIERS.map(() => ""));
+      }, [LLCFG.TIERS.length]);
       const [inviteEmails, setInviteEmails] = useState("");
       const [inviteOk, setInviteOk] = useState("");
       const [linkCopied, setLinkCopied] = useState(false);
@@ -1780,11 +1793,11 @@
     
         // Validate tier picks — allow fewer if tier doesn't have enough golfers
         let totalPicks = 0;
-        for (let i = 0; i < CFG.TIERS.length; i++) {
-          const tierGolfers = registrationField.filter(g => g.owgr >= CFG.TIERS[i].range[0] && g.owgr <= CFG.TIERS[i].range[1]);
-          const required = Math.min(CFG.TIERS[i].picks, tierGolfers.length);
+        for (let i = 0; i < LCFG.TIERS.length; i++) {
+          const tierGolfers = registrationField.filter(g => g.owgr >= LCFG.TIERS[i].range[0] && g.owgr <= LCFG.TIERS[i].range[1]);
+          const required = Math.min(LCFG.TIERS[i].picks, tierGolfers.length);
           if (tierPicks[i].length < required)
-            return setRErr(`${CFG.TIERS[i].label} needs ${required} pick${required !== 1 ? "s" : ""} (${tierGolfers.length} available).`);
+            return setRErr(`${LCFG.TIERS[i].label} needs ${required} pick${required !== 1 ? "s" : ""} (${tierGolfers.length} available).`);
           totalPicks += tierPicks[i].length;
         }
         if (totalPicks === 0) return setRErr("You need to make at least some picks.");
@@ -1811,7 +1824,7 @@
     
         // Build pick details
         const picks = tierPicks.flat();
-        const picksByTier = CFG.TIERS.map((tier, ti) =>
+        const picksByTier = LCFG.TIERS.map((tier, ti) =>
           `${tier.label} (${tier.desc}): ${tierPicks[ti].join(", ")}`
         ).join("\n");
         const tournName = targetTournament || tName || "Golf Pool";
@@ -1847,7 +1860,7 @@
             `Tiebreaker Prediction: ${rTiebreaker.trim()}`,
             ``,
             `Your Picks:`,
-            ...CFG.TIERS.map((tier, ti) =>
+            ...LCFG.TIERS.map((tier, ti) =>
               `  ${tier.label} (${tier.desc}): ${tierPicks[ti].join(", ")}`
             ),
             ``,
@@ -1858,8 +1871,8 @@
             `  • You can edit your picks anytime before registration closes`,
             `  • To edit: visit the pool → Register tab → enter your email → Look Up`,
             ``,
-            `Entry Fee: $${CFG.ENTRY_FEE}`,
-            `  Pay via Venmo to @${CFG.VENMO_USERNAME}`,
+            `Entry Fee: $${LCFG.ENTRY_FEE}`,
+            `  Pay via Venmo to @${LCFG.VENMO_USERNAME}`,
             `  Note: "Golf Pool: ${rName.trim()}"`,
             ``,
             `───────────────────────────`,
@@ -1910,8 +1923,8 @@
         setROk(isEdit ? `${registeredName} updated!` : `${registeredName} registered!`);
         // Don't clear rName yet — Venmo QR needs it. Clear others.
         setREmail(""); setROwner(""); setRTiebreaker("");
-        setTierPicks(CFG.TIERS.map(() => []));
-        setSearches(CFG.TIERS.map(() => ""));
+        setTierPicks(LCFG.TIERS.map(() => []));
+        setSearches(LCFG.TIERS.map(() => ""));
       };
     
       const togglePick = (ti, name) => {
@@ -1920,8 +1933,8 @@
           const i = u[ti].indexOf(name);
           if (i >= 0) u[ti].splice(i, 1);
           else {
-            const tierGolfers = registrationField.filter(g => g.owgr >= CFG.TIERS[ti].range[0] && g.owgr <= CFG.TIERS[ti].range[1]);
-            const effectivePicks = Math.min(CFG.TIERS[ti].picks, tierGolfers.length);
+            const tierGolfers = registrationField.filter(g => g.owgr >= LCFG.TIERS[ti].range[0] && g.owgr <= LCFG.TIERS[ti].range[1]);
+            const effectivePicks = Math.min(LCFG.TIERS[ti].picks, tierGolfers.length);
             if (u[ti].length < effectivePicks) u[ti].push(name);
           }
           return u;
@@ -1934,7 +1947,7 @@
     
       // ── Admin test team — random picks from field ─────────────
       const adminTeamPicks = useMemo(() => {
-        if (!showAdminTeam || field.length < CFG.PICKS) return null;
+        if (!showAdminTeam || field.length < LCFG.PICKS) return null;
         // Deterministic "random" based on field — stays stable per tournament
         const shuffled = [...field].sort((a, b) => {
           const ha = a.name.split("").reduce((s, c) => s + c.charCodeAt(0), 0);
@@ -1943,7 +1956,7 @@
         });
         // Pick respecting tiers
         const picks = [];
-        for (const tier of CFG.TIERS) {
+        for (const tier of LCFG.TIERS) {
           const tierPool = shuffled.filter(g =>
             g.owgr >= tier.range[0] && g.owgr <= tier.range[1] && !picks.includes(g.name)
           );
@@ -1995,7 +2008,7 @@
         );
     
         // Most picked per tier
-        const mostPickedByTier = CFG.TIERS.map(tier => {
+        const mostPickedByTier = LCFG.TIERS.map(tier => {
           const tierNames = field
             .filter(g => g.owgr >= tier.range[0] && g.owgr <= tier.range[1])
             .map(g => g.name);
@@ -2114,14 +2127,6 @@
       }, [eff, tStatus, aces]);
     
       // ── Admin auth ────────────────────────────────────────────
-      const handleAdminLogin = () => {
-        if (adminInput === CFG.ADMIN_PASS) {
-          setIsAdmin(true); setAdminErr(""); setAdminInput("");
-        } else {
-          setAdminErr("Incorrect password.");
-        }
-      };
-    
       const updateM = (g, f, v) => setManual(p => ({
         ...p,
         [g]: {
@@ -2138,10 +2143,7 @@
         ...(isPro ? [{ id: "stats", l: "Stats" }] : []),
         { id: "register", l: isMobile ? "Join" : "Register" },
         { id: "rules", l: "Rules" },
-        ...(isAdmin
-          ? [{ id: "admin", l: isMobile ? "🔒" : "🔒 Admin" }]
-          : [{ id: "adminLogin", l: "🔒" }]
-        ),
+        ...(isAdmin ? [{ id: "admin", l: isMobile ? "🔒" : "🔒 Admin" }] : []),
       ];
     
       // ═══════════════════════════════════════════════════════════
@@ -2491,7 +2493,7 @@
                                 <span style={{ width: 52, textAlign: "right" }}>TOTAL</span>
                               </div>
                               {t.golferScores.map((g, gi) => {
-                                const counting = gi < CFG.COUNT;
+                                const counting = gi < LCFG.COUNT;
                                 const hasCard = scorecards[g.name] && Object.keys(scorecards[g.name]).length > 0;
                                 return (
                                   <React.Fragment key={g.name}>
@@ -2499,7 +2501,7 @@
                                     ...S.gRow,
                                     opacity: g.isCut ? 0.35 : counting ? 1 : 0.5,
                                     background: counting ? "rgba(200,184,106,0.03)" : "transparent",
-                                    borderBottom: gi === CFG.COUNT - 1
+                                    borderBottom: gi === LCFG.COUNT - 1
                                       ? "1px dashed rgba(200,184,106,0.18)"
                                       : "1px solid rgba(200,184,106,0.03)",
                                   }}>
@@ -2734,7 +2736,7 @@
                               <div style={S.gTotal}>
                                 <span style={{ width: 26 }} />
                                 <span style={{ flex: 1, fontSize: 11, letterSpacing: 2, color: "#d4c87a" }}>
-                                  BEST {CFG.COUNT} TOTAL
+                                  BEST {LCFG.COUNT} TOTAL
                                 </span>
                                 <span style={{ width: 62 }} />
                                 <span style={{ width: 52 }} />
@@ -2947,7 +2949,7 @@
                       {stats.mostPickedByTier.map((mp, i) =>
                         mp ? (
                           <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid rgba(200,184,106,0.04)", fontSize: 14 }}>
-                            <span style={{ color: "rgba(200,184,106,0.75)", width: 38 }}>{CFG.TIERS[i].label.replace("Tier ", "T")}</span>
+                            <span style={{ color: "rgba(200,184,106,0.75)", width: 38 }}>{LCFG.TIERS[i].label.replace("Tier ", "T")}</span>
                             <span style={{ flex: 1, color: "#f0ead0" }}>{mp.name}</span>
                             <span style={{ fontFamily: "monospace", color: "#d4c87a", fontSize: 13 }}>{mp.pct}%</span>
                           </div>
@@ -3032,7 +3034,7 @@
                       marginBottom: 18, lineHeight: 1.7, textAlign: "center",
                     }}>
                       <strong style={{ color: "#d4c87a" }}>{targetTournament || tName || "Tournament"}</strong> — {registrationField.length} golfers.
-                      Pick {CFG.PICKS} across {CFG.TIERS.length} tiers.
+                      Pick {LCFG.PICKS} across {LCFG.TIERS.length} tiers.
                     </p>
     
                     {/* Edit existing team — email-gated */}
@@ -3076,12 +3078,12 @@
                                 setREmail(data.email || "");
                                 setROwner(data.owner || "");
                                 setRTiebreaker(data.tiebreaker || "");
-                                const newTierPicks = CFG.TIERS.map(() => []);
+                                const newTierPicks = LCFG.TIERS.map(() => []);
                                 (data.picks || []).forEach(p => {
                                   const gField = registrationField.find(g => g.name === p);
                                   if (!gField) return;
-                                  const ti = CFG.TIERS.findIndex(t => gField.owgr >= t.range[0] && gField.owgr <= t.range[1]);
-                                  if (ti >= 0 && newTierPicks[ti].length < CFG.TIERS[ti].picks) {
+                                  const ti = LCFG.TIERS.findIndex(t => gField.owgr >= t.range[0] && gField.owgr <= t.range[1]);
+                                  if (ti >= 0 && newTierPicks[ti].length < LCFG.TIERS[ti].picks) {
                                     newTierPicks[ti].push(p);
                                   }
                                 });
@@ -3154,7 +3156,7 @@
                     )}
     
                     {/* Tier selection */}
-                    {CFG.TIERS.map((tier, ti) => {
+                    {LCFG.TIERS.map((tier, ti) => {
                       const gs = registrationField.filter(g => g.owgr >= tier.range[0] && g.owgr <= tier.range[1]);
                       const flt = searches[ti]
                         ? gs.filter(g => g.name.toLowerCase().includes(searches[ti].toLowerCase()))
@@ -3228,7 +3230,7 @@
                     {/* Pick summary */}
                     <div style={S.pickSummary}>
                       <h3 style={{ color: "#d4c87a", fontSize: 14, letterSpacing: 2, margin: "0 0 8px" }}>
-                        YOUR PICKS ({tierPicks.flat().length}/{CFG.PICKS})
+                        YOUR PICKS ({tierPicks.flat().length}/{LCFG.PICKS})
                       </h3>
                       {tierPicks.flat().length === 0 ? (
                         <p style={{ color: "rgba(200,184,106,0.85)", fontSize: 14 }}>No picks yet.</p>
@@ -3237,7 +3239,7 @@
                           tp.length > 0 && (
                             <div key={ti} style={{ marginBottom: 6 }}>
                               <span style={{ fontSize: 11, color: "rgba(200,184,106,0.85)" }}>
-                                {CFG.TIERS[ti].label}:{" "}
+                                {LCFG.TIERS[ti].label}:{" "}
                               </span>
                               <span style={{ color: "#f0ead0", fontSize: 14 }}>{tp.join(", ")}</span>
                             </div>
@@ -3255,19 +3257,19 @@
                     {rOk && (
                       <div style={{ ...S.ok, marginTop: 12 }}>
                         {rOk}
-                        {(LCFG.VENMO_USERNAME || LCFG.PAYMENT_USERNAME) && LCFG.ENTRY_FEE > 0 && (() => {
+                        {(LLCFG.VENMO_USERNAME || LCFG.PAYMENT_USERNAME) && LLCFG.ENTRY_FEE > 0 && (() => {
                           const teamName = rName.trim() || "Entry";
                           const note = `Pool: ${teamName}`;
                           const platform = LCFG.PAYMENT_PLATFORM || "venmo";
-                          const username = LCFG.PAYMENT_USERNAME || LCFG.VENMO_USERNAME;
+                          const username = LCFG.PAYMENT_USERNAME || LLCFG.VENMO_USERNAME;
                           const platformConfig = {
-                            venmo: { url: `https://venmo.com/${username}?txn=pay&amount=${LCFG.ENTRY_FEE}&note=${encodeURIComponent(note)}`, label: "Open Venmo", color: "#008CFF", scanText: "Scan to pay via Venmo" },
-                            cashapp: { url: `https://cash.app/${username}/${LCFG.ENTRY_FEE}`, label: "Open Cash App", color: "#00D632", scanText: "Scan to pay via Cash App" },
-                            paypal: { url: `https://paypal.me/${username}/${LCFG.ENTRY_FEE}`, label: "Open PayPal", color: "#0070BA", scanText: "Scan to pay via PayPal" },
-                            zelle: { url: null, label: null, color: "#6D1ED4", scanText: `Send $${LCFG.ENTRY_FEE} via Zelle to: ${username}` },
+                            venmo: { url: `https://venmo.com/${username}?txn=pay&amount=${LLCFG.ENTRY_FEE}&note=${encodeURIComponent(note)}`, label: "Open Venmo", color: "#008CFF", scanText: "Scan to pay via Venmo" },
+                            cashapp: { url: `https://cash.app/${username}/${LLCFG.ENTRY_FEE}`, label: "Open Cash App", color: "#00D632", scanText: "Scan to pay via Cash App" },
+                            paypal: { url: `https://paypal.me/${username}/${LLCFG.ENTRY_FEE}`, label: "Open PayPal", color: "#0070BA", scanText: "Scan to pay via PayPal" },
+                            zelle: { url: null, label: null, color: "#6D1ED4", scanText: `Send $${LLCFG.ENTRY_FEE} via Zelle to: ${username}` },
                           };
                           const pc = platformConfig[platform] || platformConfig.venmo;
-                          const qrData = pc.url || `Pay $${LCFG.ENTRY_FEE} to ${username} via Zelle. Note: ${note}`;
+                          const qrData = pc.url || `Pay $${LLCFG.ENTRY_FEE} to ${username} via Zelle. Note: ${note}`;
                           const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrData)}&bgcolor=1a2e1a&color=c8b86a&margin=8`;
                           return (
                             <div style={{ marginTop: 16, textAlign: "center" }}>
@@ -3276,7 +3278,7 @@
                                 border: `1px solid ${pc.color}30`, display: "inline-block",
                               }}>
                                 <p style={{ fontSize: 17, color: T.accent, fontWeight: 600, marginBottom: 4 }}>
-                                  Entry Fee: {"$" + LCFG.ENTRY_FEE}
+                                  Entry Fee: {"$" + LLCFG.ENTRY_FEE}
                                 </p>
                                 <p style={{ fontSize: 13, color: T.textMuted, marginBottom: 12, lineHeight: 1.6, maxWidth: 280, margin: "0 auto 12px" }}>
                                   {pc.scanText}
@@ -3363,7 +3365,7 @@
                           const subject = encodeURIComponent(`Join my golf pool${tName ? ` — ${tName}` : ""}!`);
                           const body = encodeURIComponent(
                             `Hey! I'm running a golf pool${tName ? ` for ${tName}` : ""} and I'd love for you to join.\n\n` +
-                            `Pick ${CFG.PICKS} golfers across ${CFG.TIERS.length} tiers and compete for the best team score.\n\n` +
+                            `Pick ${LCFG.PICKS} golfers across ${LCFG.TIERS.length} tiers and compete for the best team score.\n\n` +
                             `Register here: ${poolUrl}\n\nGood luck!`
                           );
                           const bcc = emails.join(",");
@@ -3386,8 +3388,8 @@
             {/* ══════════════════════════════════════════════════ */}
             {view === "rules" && (() => {
               const tc = Object.keys(teams).length;
-              const gross = tc * CFG.ENTRY_FEE;
-              const pot = Math.max(0, gross - CFG.ADMIN_FEE);
+              const gross = tc * LCFG.ENTRY_FEE;
+              const pot = Math.max(0, gross - LCFG.ADMIN_FEE);
               return (
               <div style={{ padding: "20px 0" }}>
                 <h2 style={S.sectionTitle}>Rules & Payouts</h2>
@@ -3397,7 +3399,7 @@
                   <h3 style={S.ruleTitle}>Entry Fee & Prize Pool</h3>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                     <div>
-                      <span style={{ fontSize: 22, color: "#d4c87a", fontWeight: 700, fontFamily: "monospace" }}>{"$" + CFG.ENTRY_FEE}</span>
+                      <span style={{ fontSize: 22, color: "#d4c87a", fontWeight: 700, fontFamily: "monospace" }}>{"$" + LCFG.ENTRY_FEE}</span>
                       <span style={{ fontSize: 14, color: "rgba(200,184,106,0.8)", marginLeft: 6 }}>per team</span>
                     </div>
                     <div style={{ textAlign: "right" }}>
@@ -3405,16 +3407,16 @@
                       <div style={{ fontSize: 26, color: "#FFD700", fontWeight: 700, fontFamily: "monospace" }}>{"$" + pot}</div>
                     </div>
                   </div>
-                  {CFG.ADMIN_FEE > 0 && (
+                  {LCFG.ADMIN_FEE > 0 && (
                     <div style={{ fontSize: 12, color: "rgba(200,184,106,0.85)", marginTop: 6, lineHeight: 1.6 }}>
-                      Total collected: {"$" + gross} ({tc} × {"$" + CFG.ENTRY_FEE}) — {"$" + CFG.ADMIN_FEE} admin fee = <strong style={{ color: "rgba(200,184,106,0.8)" }}>{"$" + pot} prize pool</strong>
+                      Total collected: {"$" + gross} ({tc} × {"$" + LCFG.ENTRY_FEE}) — {"$" + LCFG.ADMIN_FEE} admin fee = <strong style={{ color: "rgba(200,184,106,0.8)" }}>{"$" + pot} prize pool</strong>
                     </div>
                   )}
                   <div style={{ marginTop: 14, fontFamily: "monospace", fontSize: 18 }}>
                     {[
-                      [1, "1st", "#FFD700", CFG.PAYOUT_SPLIT[1]],
-                      [2, "2nd", "#C0C0C0", CFG.PAYOUT_SPLIT[2]],
-                      [3, "3rd", "#CD7F32", CFG.PAYOUT_SPLIT[3]],
+                      [1, "1st", "#FFD700", LCFG.PAYOUT_SPLIT[1]],
+                      [2, "2nd", "#C0C0C0", LCFG.PAYOUT_SPLIT[2]],
+                      [3, "3rd", "#CD7F32", LCFG.PAYOUT_SPLIT[3]],
                     ].map(([p, l, c, pct]) => (
                       <div key={p} style={{ display: "flex", justifyContent: "space-between", maxWidth: 280, padding: "5px 0", borderBottom: "1px solid rgba(200,184,106,0.04)" }}>
                         <span style={{ color: c }}>{l} ({Math.round(pct * 100)}%)</span>
@@ -3424,16 +3426,16 @@
                   </div>
                   {tc < 3 && <p style={{ fontSize: 12, color: "rgba(200,184,106,0.85)", marginTop: 8, fontStyle: "italic" }}>Payouts update as teams register.</p>}
                   <p style={{ fontSize: 11, color: "rgba(200,184,106,0.8)", marginTop: 8, lineHeight: 1.6 }}>
-                    A flat {"$" + CFG.ADMIN_FEE} admin fee covers the cost of running the pool (email notifications, hosting, and platform services). The remaining balance is the prize pool, split between the top 3 finishers.
+                    A flat {"$" + LCFG.ADMIN_FEE} admin fee covers the cost of running the pool (email notifications, hosting, and platform services). The remaining balance is the prize pool, split between the top 3 finishers.
                   </p>
                 </div>
     
                 {/* Draft Format */}
                 <div style={S.ruleBox}>
                   <h3 style={S.ruleTitle}>Draft Format</h3>
-                  <p style={S.ruleText}>Pick {CFG.PICKS} golfers across {CFG.TIERS.length} OWGR-based tiers. Tiers ensure balanced teams — everyone gets elite talent plus sleeper picks.</p>
+                  <p style={S.ruleText}>Pick {LCFG.PICKS} golfers across {LCFG.TIERS.length} OWGR-based tiers. Tiers ensure balanced teams — everyone gets elite talent plus sleeper picks.</p>
                   <div style={{ marginTop: 10 }}>
-                    {CFG.TIERS.map((t, j) => (
+                    {LCFG.TIERS.map((t, j) => (
                       <div key={j} style={{ display: "flex", gap: 10, padding: "4px 0", borderBottom: "1px solid rgba(200,184,106,0.04)", fontSize: 14 }}>
                         <span style={{ color: "#d4c87a", width: 55 }}>{t.label}</span>
                         <span style={{ flex: 1, color: "rgba(200,184,106,0.75)" }}>{t.desc}</span>
@@ -3447,7 +3449,7 @@
                 <div style={S.ruleBox}>
                   <h3 style={S.ruleTitle}>1. Scoring</h3>
                   <p style={S.ruleText}>
-                    Team score = sum of your best {CFG.COUNT} golfers' to-par totals. Only the best {CFG.COUNT} of {CFG.PICKS} count — your other {CFG.PICKS - CFG.COUNT} act as insurance against missed cuts and bad rounds.
+                    Team score = sum of your best {LCFG.COUNT} golfers' to-par totals. Only the best {LCFG.COUNT} of {LCFG.PICKS} count — your other {LCFG.PICKS - LCFG.COUNT} act as insurance against missed cuts and bad rounds.
                   </p>
                 </div>
     
@@ -3472,10 +3474,10 @@
                   </p>
                   <div style={{ marginTop: 8 }}>
                     {[
-                      ["Hole-in-One / Double Eagle", CFG.BONUSES.HOLE_IN_ONE, "Any golfer on your team aces a hole or makes an albatross"],
-                      ["Tournament Champion", CFG.BONUSES.TOURNAMENT_WINNER, "You drafted the winner of the tournament"],
-                      ["Low Round of the Day", CFG.BONUSES.LOW_ROUND, "Any golfer on your team posts the lowest round on any day"],
-                      ["Low Amateur", CFG.BONUSES.LOW_AMATEUR, "You drafted the low amateur of the tournament"],
+                      ["Hole-in-One / Double Eagle", LCFG.BONUSES.HOLE_IN_ONE, "Any golfer on your team aces a hole or makes an albatross"],
+                      ["Tournament Champion", LCFG.BONUSES.TOURNAMENT_WINNER, "You drafted the winner of the tournament"],
+                      ["Low Round of the Day", LCFG.BONUSES.LOW_ROUND, "Any golfer on your team posts the lowest round on any day"],
+                      ["Low Amateur", LCFG.BONUSES.LOW_AMATEUR, "You drafted the low amateur of the tournament"],
                     ].map(([name, val, desc], i) => (
                       <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid rgba(200,184,106,0.04)" }}>
                         <span style={{ fontFamily: "monospace", fontSize: 18, color: "#ff2020", fontWeight: 700, width: 30 }}>{val}</span>
@@ -3521,42 +3523,12 @@
             {/* ══════════════════════════════════════════════════ */}
             {/* ADMIN LOGIN                                       */}
             {/* ══════════════════════════════════════════════════ */}
-            {view === "adminLogin" && !isAdmin && (
-              <div style={{ padding: "40px 0", maxWidth: 320, margin: "0 auto" }}>
-                <h2 style={S.sectionTitle}>Admin Access</h2>
-                <p style={{ color: "rgba(200,184,106,0.8)", fontSize: 14, textAlign: "center", marginBottom: 16 }}>
-                  Enter the admin password.
-                </p>
-                {adminErr && <div style={S.errBox}>{adminErr}</div>}
-                <input
-                  type="password"
-                  style={S.formInput}
-                  value={adminInput}
-                  onChange={e => setAdminInput(e.target.value)}
-                  placeholder="Password"
-                  onKeyDown={e => e.key === "Enter" && handleAdminLogin()}
-                />
-                <button onClick={handleAdminLogin} style={{ ...S.primaryBtn, marginTop: 12 }}>
-                  Unlock
-                </button>
-              </div>
-            )}
-    
-            {/* ══════════════════════════════════════════════════ */}
             {/* ADMIN PANEL                                       */}
             {/* ══════════════════════════════════════════════════ */}
             {view === "admin" && isAdmin && (
               <div style={{ padding: "20px 0" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                   <h2 style={{ ...S.sectionTitle, margin: 0 }}>Admin Panel</h2>
-                  <button onClick={() => { setIsAdmin(false); setView("leaderboard"); }}
-                    style={{
-                      background: "none", border: "1px solid rgba(200,184,106,0.2)",
-                      color: "rgba(200,184,106,0.8)", padding: "4px 12px",
-                      borderRadius: 3, cursor: "pointer", fontSize: 12,
-                    }}>
-                    Lock
-                  </button>
                 </div>
     
                 {/* ── WORKFLOW CHECKLIST ──────────────────────── */}
@@ -3759,7 +3731,7 @@
                 <div style={{ ...S.ruleBox, marginTop: 12, borderLeft: "3px solid #FFD700" }}>
                   <h3 style={S.ruleTitle}>🕳️ Hole-in-One Tracker</h3>
                   <p style={{ fontSize: 12, color: "rgba(200,184,106,0.7)", marginBottom: 8 }}>
-                    Mark golfers who made an ace. This applies the {CFG.BONUSES.HOLE_IN_ONE} bonus.
+                    Mark golfers who made an ace. This applies the {LCFG.BONUSES.HOLE_IN_ONE} bonus.
                   </p>
                   {aces.length > 0 && (
                     <div style={{ marginBottom: 8 }}>
@@ -3960,12 +3932,12 @@
                       for (const [golferName, origTier] of Object.entries(teamData.tierMap)) {
                         const golfer = currentField.find(g => g.name === golferName);
                         if (!golfer) continue;
-                        const currentTier = CFG.TIERS.findIndex(t => golfer.owgr >= t.range[0] && golfer.owgr <= t.range[1]);
+                        const currentTier = LCFG.TIERS.findIndex(t => golfer.owgr >= t.range[0] && golfer.owgr <= t.range[1]);
                         if (currentTier !== origTier && currentTier >= 0) {
                           teamIssues.push({
                             golfer: golferName,
-                            was: CFG.TIERS[origTier]?.label || `Tier ${origTier + 1}`,
-                            now: CFG.TIERS[currentTier]?.label || `Tier ${currentTier + 1}`,
+                            was: LCFG.TIERS[origTier]?.label || `Tier ${origTier + 1}`,
+                            now: LCFG.TIERS[currentTier]?.label || `Tier ${currentTier + 1}`,
                           });
                         }
                       }
@@ -4027,7 +3999,7 @@
                 <div style={{ ...S.ruleBox, marginTop: 12 }}>
                   <h3 style={S.ruleTitle}>
                     Teams ({Object.keys(teams).length})
-                    {CFG.ENTRY_FEE > 0 && (
+                    {LCFG.ENTRY_FEE > 0 && (
                       <span style={{ fontSize: 12, fontWeight: 400, color: "rgba(200,184,106,0.7)", marginLeft: 8 }}>
                         💰 {Object.keys(payments).filter(n => payments[n]).length}/{Object.keys(teams).length} paid
                       </span>
@@ -4036,7 +4008,7 @@
                   {Object.entries(teams).map(([n, d]) => (
                     <div key={n} style={{ borderBottom: "1px solid rgba(200,184,106,0.05)", padding: "7px 0" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                        {CFG.ENTRY_FEE > 0 && (
+                        {LCFG.ENTRY_FEE > 0 && (
                           <label style={{ cursor: "pointer", flexShrink: 0 }}>
                             <input type="checkbox" checked={!!payments[n]} onChange={async (e) => {
                               const np = { ...payments, [n]: e.target.checked };
@@ -4051,10 +4023,10 @@
                           textDecoration: payments[n] ? "none" : "none",
                         }}>
                           {n}
-                          {!payments[n] && CFG.ENTRY_FEE > 0 && (
+                          {!payments[n] && LCFG.ENTRY_FEE > 0 && (
                             <span style={{ fontSize: 10, color: "#c66", marginLeft: 5 }}>UNPAID</span>
                           )}
-                          {payments[n] && CFG.ENTRY_FEE > 0 && (
+                          {payments[n] && LCFG.ENTRY_FEE > 0 && (
                             <span style={{ fontSize: 10, color: "#4c4", marginLeft: 5 }}>PAID</span>
                           )}
                         </span>
@@ -4069,7 +4041,7 @@
                           ✕
                         </button>
                       </div>
-                      <div style={{ fontSize: 12, color: "rgba(200,184,106,0.85)", marginTop: 3, paddingLeft: CFG.ENTRY_FEE > 0 ? 22 : 0 }}>
+                      <div style={{ fontSize: 12, color: "rgba(200,184,106,0.85)", marginTop: 3, paddingLeft: LCFG.ENTRY_FEE > 0 ? 22 : 0 }}>
                         {d.tiebreaker && <span style={{ color: "rgba(200,184,106,0.8)", marginRight: 8 }}>TB: {d.tiebreaker}</span>}
                         {d.picks?.join(", ")}
                       </div>
@@ -4100,15 +4072,15 @@
                           summary += `${pos}. ${t.name} (${owner}) — ${parStr}\n`;
                           // Show each golfer
                           t.golferScores.forEach((g, gi) => {
-                            const counting = gi < CFG.COUNT;
+                            const counting = gi < LCFG.COUNT;
                             const adj = g.adj === 0 ? "E" : (g.adj > 0 ? `+${g.adj}` : `${g.adj}`);
                             summary += `   ${counting ? "✓" : "·"} ${g.name}: ${adj}${g.isCut ? " (MC)" : ""}\n`;
                           });
                           // Bonuses
                           const bonuses = [];
                           const winner = sorted[0]?.golferScores?.[0]?.name;
-                          if (winner && t.picks.includes(winner)) bonuses.push(`Tournament Winner (${CFG.BONUSES.TOURNAMENT_WINNER})`);
-                          t.picks.forEach(p => { if (aces.includes(p)) bonuses.push(`Hole-in-One: ${p} (${CFG.BONUSES.HOLE_IN_ONE})`); });
+                          if (winner && t.picks.includes(winner)) bonuses.push(`Tournament Winner (${LCFG.BONUSES.TOURNAMENT_WINNER})`);
+                          t.picks.forEach(p => { if (aces.includes(p)) bonuses.push(`Hole-in-One: ${p} (${LCFG.BONUSES.HOLE_IN_ONE})`); });
                           if (bonuses.length) summary += `   🎯 Bonuses: ${bonuses.join(", ")}\n`;
                           summary += "\n";
                         });
@@ -4526,6 +4498,7 @@
           tiers: Number(leagueForm.tiers) || 4,
           picksPerTeam: Number(leagueForm.picksPerTeam) || 10,
           bestOf: Number(leagueForm.bestOf) || 5,
+          useTiers: leagueForm.useTiers !== false,
           createdAt: Date.now(),
           ownerId: user.uid,
           ownerEmail: user.email,
@@ -4664,7 +4637,7 @@
               </div>
             </div>
             <div style={{ paddingTop:"50px" }}>
-              <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} leagueConfig={selectedLeague} leagueId={selectedLeague.id} isPro={isPro} isElite={isElite} onUpgrade={() => setShowUpgradeModal(true)} />
+              <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} leagueConfig={selectedLeague} leagueId={selectedLeague.id} isPro={isPro} isElite={isElite} onUpgrade={() => setShowUpgradeModal(true)} isLeagueOwner={user && selectedLeague && user.uid === selectedLeague.ownerId} />
             </div>
           </div>
         );
@@ -5046,7 +5019,7 @@
 
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
                     <div>
-                      <label style={S_DASH.label}>Max Players (Free: 20)</label>
+                      <label style={S_DASH.label}>Max Players (Free: 10)</label>
                       <input style={S_DASH.input} type="number" value={leagueForm.maxPlayers} onChange={e => setLeagueForm({...leagueForm, maxPlayers: e.target.value})} />
                     </div>
                     <div>
@@ -5055,20 +5028,54 @@
                     </div>
                   </div>
 
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                  <label style={S_DASH.label}>Drafting Mode</label>
+                  <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+                    <button onClick={() => setLeagueForm({...leagueForm, useTiers: true})} style={{
+                      flex:1, padding:"10px", borderRadius:6, cursor:"pointer", fontSize:"12px", fontWeight:600,
+                      border: leagueForm.useTiers !== false ? "2px solid #d4af37" : "1px solid rgba(212,175,55,0.2)",
+                      background: leagueForm.useTiers !== false ? "rgba(212,175,55,0.1)" : "transparent",
+                      color: leagueForm.useTiers !== false ? "#d4af37" : "rgba(255,255,255,0.4)",
+                    }}>
+                      OWGR Tiers
+                      <div style={{ fontSize:9, color:"rgba(255,255,255,0.3)", marginTop:2, fontWeight:400 }}>Best for majors & full fields</div>
+                    </button>
+                    <button onClick={() => setLeagueForm({...leagueForm, useTiers: false})} style={{
+                      flex:1, padding:"10px", borderRadius:6, cursor:"pointer", fontSize:"12px", fontWeight:600,
+                      border: leagueForm.useTiers === false ? "2px solid #d4af37" : "1px solid rgba(212,175,55,0.2)",
+                      background: leagueForm.useTiers === false ? "rgba(212,175,55,0.1)" : "transparent",
+                      color: leagueForm.useTiers === false ? "#d4af37" : "rgba(255,255,255,0.4)",
+                    }}>
+                      Open Draft
+                      <div style={{ fontSize:9, color:"rgba(255,255,255,0.3)", marginTop:2, fontWeight:400 }}>Pick any golfers, no tier limits</div>
+                    </button>
+                  </div>
+
+                  {leagueForm.useTiers !== false && (
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                      <div>
+                        <label style={S_DASH.label}>Best Scores Count</label>
+                        <input style={S_DASH.input} type="number" value={leagueForm.bestOf} onChange={e => setLeagueForm({...leagueForm, bestOf: e.target.value})} />
+                      </div>
+                      <div>
+                        <label style={S_DASH.label}>Number of Tiers</label>
+                        <select style={S_DASH.select} value={leagueForm.tiers} onChange={e => setLeagueForm({...leagueForm, tiers: e.target.value})}>
+                          <option value="4">4 Tiers</option>
+                          <option value="5">5 Tiers</option>
+                          <option value="6">6 Tiers</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {leagueForm.useTiers === false && (
                     <div>
                       <label style={S_DASH.label}>Best Scores Count</label>
                       <input style={S_DASH.input} type="number" value={leagueForm.bestOf} onChange={e => setLeagueForm({...leagueForm, bestOf: e.target.value})} />
+                      <p style={{ fontSize:10, color:"rgba(255,255,255,0.25)", marginTop:-6, marginBottom:10 }}>
+                        Players pick any {leagueForm.picksPerTeam} golfers from the field. Best {leagueForm.bestOf} scores count.
+                      </p>
                     </div>
-                    <div>
-                      <label style={S_DASH.label}>Number of Tiers</label>
-                      <select style={S_DASH.select} value={leagueForm.tiers} onChange={e => setLeagueForm({...leagueForm, tiers: e.target.value})}>
-                        <option value="4">4 Tiers</option>
-                        <option value="5">5 Tiers</option>
-                        <option value="6">6 Tiers</option>
-                      </select>
-                    </div>
-                  </div>
+                  )}
 
                   <label style={S_DASH.label}>Registration Lock Date</label>
                   <input style={{ ...S_DASH.input, colorScheme:"dark" }} type="datetime-local" value={leagueForm.lockDate} onChange={e => setLeagueForm({...leagueForm, lockDate: e.target.value})} />
@@ -5306,7 +5313,7 @@
                       </div>
                     </div>
                   )}
-                  <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} leagueConfig={seasonLeagueConfig} leagueId={seasonLeagueId} isPro={isPro} isElite={isElite} onUpgrade={() => setShowUpgradeModal(true)} />
+                  <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} leagueConfig={seasonLeagueConfig} leagueId={seasonLeagueId} isPro={isPro} isElite={isElite} onUpgrade={() => setShowUpgradeModal(true)} isLeagueOwner={user && selectedLeague && user.uid === selectedLeague.ownerId} />
                 </div>
               )}
 
