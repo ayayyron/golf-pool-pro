@@ -1333,19 +1333,19 @@
       const [rName, setRName] = useState("");
       const [rEmail, setREmail] = useState("");
       const [rOwner, setROwner] = useState("");
-      const [tierPicks, setTierPicks] = useState(LLCFG.TIERS.map(() => []));
+      const [tierPicks, setTierPicks] = useState(LCFG.TIERS.map(() => []));
       const [rErr, setRErr] = useState("");
       const [editLookupEmail, setEditLookupEmail] = useState("");
       const [editMatchedTeam, setEditMatchedTeam] = useState(null); // team name found by email
       const [rOk, setROk] = useState("");
       const [rTiebreaker, setRTiebreaker] = useState(""); // prediction of winning score
-      const [searches, setSearches] = useState(LLCFG.TIERS.map(() => ""));
+      const [searches, setSearches] = useState(LCFG.TIERS.map(() => ""));
 
       // Reset picks when tier config changes
       useEffect(() => {
-        setTierPicks(LLCFG.TIERS.map(() => []));
-        setSearches(LLCFG.TIERS.map(() => ""));
-      }, [LLCFG.TIERS.length]);
+        setTierPicks(LCFG.TIERS.map(() => []));
+        setSearches(LCFG.TIERS.map(() => ""));
+      }, [LCFG.TIERS.length]);
       const [inviteEmails, setInviteEmails] = useState("");
       const [inviteOk, setInviteOk] = useState("");
       const [linkCopied, setLinkCopied] = useState(false);
@@ -3257,19 +3257,19 @@
                     {rOk && (
                       <div style={{ ...S.ok, marginTop: 12 }}>
                         {rOk}
-                        {(LLCFG.VENMO_USERNAME || LCFG.PAYMENT_USERNAME) && LLCFG.ENTRY_FEE > 0 && (() => {
+                        {(LCFG.VENMO_USERNAME || LCFG.PAYMENT_USERNAME) && LCFG.ENTRY_FEE > 0 && (() => {
                           const teamName = rName.trim() || "Entry";
                           const note = `Pool: ${teamName}`;
                           const platform = LCFG.PAYMENT_PLATFORM || "venmo";
-                          const username = LCFG.PAYMENT_USERNAME || LLCFG.VENMO_USERNAME;
+                          const username = LCFG.PAYMENT_USERNAME || LCFG.VENMO_USERNAME;
                           const platformConfig = {
-                            venmo: { url: `https://venmo.com/${username}?txn=pay&amount=${LLCFG.ENTRY_FEE}&note=${encodeURIComponent(note)}`, label: "Open Venmo", color: "#008CFF", scanText: "Scan to pay via Venmo" },
-                            cashapp: { url: `https://cash.app/${username}/${LLCFG.ENTRY_FEE}`, label: "Open Cash App", color: "#00D632", scanText: "Scan to pay via Cash App" },
-                            paypal: { url: `https://paypal.me/${username}/${LLCFG.ENTRY_FEE}`, label: "Open PayPal", color: "#0070BA", scanText: "Scan to pay via PayPal" },
-                            zelle: { url: null, label: null, color: "#6D1ED4", scanText: `Send $${LLCFG.ENTRY_FEE} via Zelle to: ${username}` },
+                            venmo: { url: `https://venmo.com/${username}?txn=pay&amount=${LCFG.ENTRY_FEE}&note=${encodeURIComponent(note)}`, label: "Open Venmo", color: "#008CFF", scanText: "Scan to pay via Venmo" },
+                            cashapp: { url: `https://cash.app/${username}/${LCFG.ENTRY_FEE}`, label: "Open Cash App", color: "#00D632", scanText: "Scan to pay via Cash App" },
+                            paypal: { url: `https://paypal.me/${username}/${LCFG.ENTRY_FEE}`, label: "Open PayPal", color: "#0070BA", scanText: "Scan to pay via PayPal" },
+                            zelle: { url: null, label: null, color: "#6D1ED4", scanText: `Send $${LCFG.ENTRY_FEE} via Zelle to: ${username}` },
                           };
                           const pc = platformConfig[platform] || platformConfig.venmo;
-                          const qrData = pc.url || `Pay $${LLCFG.ENTRY_FEE} to ${username} via Zelle. Note: ${note}`;
+                          const qrData = pc.url || `Pay $${LCFG.ENTRY_FEE} to ${username} via Zelle. Note: ${note}`;
                           const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrData)}&bgcolor=1a2e1a&color=c8b86a&margin=8`;
                           return (
                             <div style={{ marginTop: 16, textAlign: "center" }}>
@@ -3278,7 +3278,7 @@
                                 border: `1px solid ${pc.color}30`, display: "inline-block",
                               }}>
                                 <p style={{ fontSize: 17, color: T.accent, fontWeight: 600, marginBottom: 4 }}>
-                                  Entry Fee: {"$" + LLCFG.ENTRY_FEE}
+                                  Entry Fee: {"$" + LCFG.ENTRY_FEE}
                                 </p>
                                 <p style={{ fontSize: 13, color: T.textMuted, marginBottom: 12, lineHeight: 1.6, maxWidth: 280, margin: "0 auto 12px" }}>
                                   {pc.scanText}
