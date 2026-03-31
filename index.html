@@ -1202,7 +1202,11 @@
       );
     }
     
-    function GolfPool({ leagueTheme, leagueConfig, leagueId }) {
+    function GolfPool({ leagueTheme, leagueConfig, leagueId, isPro: _isPro, isElite: _isElite, onUpgrade }) {
+      // Default to true for shared links (no subscription context) so participants see the pool
+      const isPro = _isPro !== false;
+      const isElite = _isElite === true;
+      const isFree = _isPro === false;
       const T = THEMES[leagueTheme] || THEMES.clubhouse;
 
       // Screen size detection (needed before styles)
@@ -1225,6 +1229,8 @@
         if (LC.entryFee != null) base.ENTRY_FEE = Number(LC.entryFee);
         if (LC.adminFee != null) base.ADMIN_FEE = Number(LC.adminFee);
         if (LC.venmoUsername) base.VENMO_USERNAME = LC.venmoUsername;
+        if (LC.paymentUsername) base.PAYMENT_USERNAME = LC.paymentUsername;
+        if (LC.paymentPlatform) base.PAYMENT_PLATFORM = LC.paymentPlatform;
         if (LC.picksPerTeam) base.PICKS = Number(LC.picksPerTeam);
         if (LC.bestOf) base.COUNT = Number(LC.bestOf);
         if (LC.payoutSplit && Array.isArray(LC.payoutSplit)) {
@@ -1761,6 +1767,11 @@
       const handleReg = async () => {
         setRErr(""); setROk("");
         if (picksLocked) return setRErr("Picks are locked. Registration is closed.");
+        // Free tier: max 10 teams
+        const isNewTeam = !teams[rName.trim()];
+        if (isFree && isNewTeam && Object.keys(teams).length >= 10) {
+          return setRErr("This pool has reached the free tier limit of 10 teams. The pool admin can upgrade to Pro for unlimited teams.");
+        }
         if (!rName.trim()) return setRErr("Enter a team name.");
         if (!rOwner.trim()) return setRErr("Enter your name.");
         if (rOwner.trim().split(/\s+/).length < 2) return setRErr("Please enter your first and last name so we know who you are.");
@@ -2124,7 +2135,7 @@
       const tabs = [
         { id: "leaderboard", l: isMobile ? "Pool" : "Pool" },
         { id: "tournament", l: isMobile ? "Tourney" : "Tournament" },
-        { id: "stats", l: "Stats" },
+        ...(isPro ? [{ id: "stats", l: "Stats" }] : []),
         { id: "register", l: isMobile ? "Join" : "Register" },
         { id: "rules", l: "Rules" },
         ...(isAdmin
@@ -2163,7 +2174,7 @@
             )}
     
             {/* ── NEWS TICKER ──────────────────────────────────── */}
-            {news.length > 0 && (
+            {isPro && news.length > 0 && (
               <div style={S.ticker}>
                 <div style={S.tickerTrack}>
                   {[...news, ...news].map((n, i) => (
@@ -2281,7 +2292,7 @@
             </header>
     
             {/* ── WEATHER WIDGET ───────────────────────────────── */}
-            {weather && (() => {
+            {isPro && weather && (() => {
               const venueKey = Object.keys(CFG.VENUES).find(k => (tName || "").toLowerCase().includes(k));
               const venue = venueKey ? CFG.VENUES[venueKey] : null;
               return (
@@ -2340,6 +2351,22 @@
                 </button>
               ))}
             </nav>
+
+            {/* Free tier upgrade banner */}
+            {isFree && (
+              <div onClick={onUpgrade} style={{
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
+                padding: "10px 16px", background: `linear-gradient(90deg, ${T.accentFaint}, rgba(0,0,0,0.2), ${T.accentFaint})`,
+                borderBottom: `1px solid ${T.accentFaint}`, cursor: "pointer",
+              }}>
+                <span style={{ fontSize: 12, color: T.accentLight }}>
+                  Free tier · {Object.keys(teams).length}/10 teams · Upgrade to Pro for unlimited teams, live stats, weather & more
+                </span>
+                <span style={{ fontSize: 11, padding: "3px 10px", background: T.accent, color: T.bgSolid, borderRadius: 4, fontWeight: 700, letterSpacing: 1 }}>
+                  UPGRADE
+                </span>
+              </div>
+            )}
     
             {/* ══════════════════════════════════════════════════ */}
             {/* LEADERBOARD + STATS DASHBOARD (side by side on desktop) */}
@@ -2730,7 +2757,7 @@
               </div>
     
               {/* Desktop: stats sidebar */}
-              {isDesktop && stats && (
+              {isDesktop && isPro && stats && (
                 <div style={{ padding: "20px 0" }}>
                   <h2 style={S.sectionTitle}>Pool Stats</h2>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -3228,34 +3255,47 @@
                     {rOk && (
                       <div style={{ ...S.ok, marginTop: 12 }}>
                         {rOk}
-                        {CFG.VENMO_USERNAME && CFG.ENTRY_FEE > 0 && (() => {
+                        {(LCFG.VENMO_USERNAME || LCFG.PAYMENT_USERNAME) && LCFG.ENTRY_FEE > 0 && (() => {
                           const teamName = rName.trim() || "Entry";
-                          const note = `Golf Pool: ${teamName}`;
-                          const venmoUrl = `https://venmo.com/${CFG.VENMO_USERNAME}?txn=pay&amount=${CFG.ENTRY_FEE}&note=${encodeURIComponent(note)}`;
-                          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(venmoUrl)}&bgcolor=1a2e1a&color=d4c87a&margin=8`;
+                          const note = `Pool: ${teamName}`;
+                          const platform = LCFG.PAYMENT_PLATFORM || "venmo";
+                          const username = LCFG.PAYMENT_USERNAME || LCFG.VENMO_USERNAME;
+                          const platformConfig = {
+                            venmo: { url: `https://venmo.com/${username}?txn=pay&amount=${LCFG.ENTRY_FEE}&note=${encodeURIComponent(note)}`, label: "Open Venmo", color: "#008CFF", scanText: "Scan to pay via Venmo" },
+                            cashapp: { url: `https://cash.app/${username}/${LCFG.ENTRY_FEE}`, label: "Open Cash App", color: "#00D632", scanText: "Scan to pay via Cash App" },
+                            paypal: { url: `https://paypal.me/${username}/${LCFG.ENTRY_FEE}`, label: "Open PayPal", color: "#0070BA", scanText: "Scan to pay via PayPal" },
+                            zelle: { url: null, label: null, color: "#6D1ED4", scanText: `Send $${LCFG.ENTRY_FEE} via Zelle to: ${username}` },
+                          };
+                          const pc = platformConfig[platform] || platformConfig.venmo;
+                          const qrData = pc.url || `Pay $${LCFG.ENTRY_FEE} to ${username} via Zelle. Note: ${note}`;
+                          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrData)}&bgcolor=1a2e1a&color=c8b86a&margin=8`;
                           return (
                             <div style={{ marginTop: 16, textAlign: "center" }}>
                               <div style={{
                                 background: "rgba(0,0,0,0.2)", borderRadius: 8, padding: 16,
-                                border: "1px solid rgba(200,184,106,0.15)", display: "inline-block",
+                                border: `1px solid ${pc.color}30`, display: "inline-block",
                               }}>
-                                <p style={{ fontSize: 17, color: "#d4c87a", fontWeight: 600, marginBottom: 4 }}>
-                                  Entry Fee: {"$" + CFG.ENTRY_FEE}
+                                <p style={{ fontSize: 17, color: T.accent, fontWeight: 600, marginBottom: 4 }}>
+                                  Entry Fee: {"$" + LCFG.ENTRY_FEE}
                                 </p>
-                                <p style={{ fontSize: 13, color: "rgba(200,184,106,0.8)", marginBottom: 12, lineHeight: 1.6, maxWidth: 280, margin: "0 auto 12px" }}>
-                                  Scan with your phone camera to pay via Venmo.
+                                <p style={{ fontSize: 13, color: T.textMuted, marginBottom: 12, lineHeight: 1.6, maxWidth: 280, margin: "0 auto 12px" }}>
+                                  {pc.scanText}
                                 </p>
-                                <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
-                                  <img src={qrUrl} alt="Venmo QR" style={{ borderRadius: 8, border: "2px solid rgba(200,184,106,0.2)", width: 160, height: 160 }} />
-                                </div>
-                                <p style={{ fontSize: 12, color: "rgba(200,184,106,0.7)", marginBottom: 10 }}>
-                                  Note: <strong>{note}</strong>
+                                {pc.url && (
+                                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+                                    <img src={qrUrl} alt="Payment QR" style={{ borderRadius: 8, border: `2px solid ${pc.color}30`, width: 160, height: 160 }} />
+                                  </div>
+                                )}
+                                <p style={{ fontSize: 12, color: T.textMuted, marginBottom: 10 }}>
+                                  {platform === "zelle" ? `Send to: ${username}` : `Note: `}<strong>{note}</strong>
                                 </p>
-                                <a href={venmoUrl} target="_blank" rel="noopener noreferrer" style={{
-                                  display: "inline-block", padding: "8px 18px",
-                                  background: "#008CFF", color: "#fff", borderRadius: 5,
-                                  textDecoration: "none", fontSize: 14, fontWeight: 600,
-                                }}>Open Venmo</a>
+                                {pc.url && (
+                                  <a href={pc.url} target="_blank" rel="noopener noreferrer" style={{
+                                    display: "inline-block", padding: "8px 18px",
+                                    background: pc.color, color: "#fff", borderRadius: 5,
+                                    textDecoration: "none", fontSize: 14, fontWeight: 600,
+                                  }}>{pc.label}</a>
+                                )}
                               </div>
                             </div>
                           );
@@ -4437,7 +4477,7 @@
         name: "", tournament: "", sport: "golf",
         entryFee: 20, adminFee: 0,
         payoutSplit: "60/30/10", customPayout: "",
-        venmoUsername: "", maxPlayers: 20,
+        venmoUsername: "", paymentPlatform: "venmo", paymentUsername: "", maxPlayers: 20,
         lockDate: "", lockTime: "",
         tiers: "4", picksPerTeam: 10, bestOf: 5,
         theme: "clubhouse", logoUrl: "",
@@ -4470,7 +4510,9 @@
           entryFee: Number(leagueForm.entryFee) || 0,
           adminFee: Number(leagueForm.adminFee) || 0,
           payoutSplit: payout,
-          venmoUsername: leagueForm.venmoUsername.trim(),
+          venmoUsername: leagueForm.paymentUsername?.trim() || leagueForm.venmoUsername?.trim() || "",
+          paymentPlatform: leagueForm.paymentPlatform || "venmo",
+          paymentUsername: leagueForm.paymentUsername?.trim() || leagueForm.venmoUsername?.trim() || "",
           maxPlayers: Number(leagueForm.maxPlayers) || 20,
           lockDate: leagueForm.lockDate,
           lockTime: leagueForm.lockTime,
@@ -4498,7 +4540,7 @@
           sport: leagueData.sport, ownerId: user.uid, createdAt: Date.now(),
         });
         setShowCreateLeague(false);
-        setLeagueForm({ name: "", tournament: "", sport: "golf", entryFee: 20, adminFee: 0, payoutSplit: "60/30/10", customPayout: "", venmoUsername: "", maxPlayers: 20, lockDate: "", lockTime: "", tiers: "4", picksPerTeam: 10, bestOf: 5, theme: "clubhouse", logoUrl: "", leagueType: "single", seasonTournaments: [], seasonPreset: null, noRepeatPicks: true, maxTradesPerEvent: 0, seasonEntryFee: 50, perEventFee: 20, seasonPoints: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1] });
+        setLeagueForm({ name: "", tournament: "", sport: "golf", entryFee: 20, adminFee: 0, payoutSplit: "60/30/10", customPayout: "", venmoUsername: "", paymentPlatform: "venmo", paymentUsername: "", maxPlayers: 20, lockDate: "", lockTime: "", tiers: "4", picksPerTeam: 10, bestOf: 5, theme: "clubhouse", logoUrl: "", leagueType: "single", seasonTournaments: [], seasonPreset: null, noRepeatPicks: true, maxTradesPerEvent: 0, seasonEntryFee: 50, perEventFee: 20, seasonPoints: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1] });
         loadLeagues();
       };
 
@@ -4600,7 +4642,7 @@
               </div>
             </div>
             <div style={{ paddingTop:"50px" }}>
-              <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} leagueConfig={selectedLeague} leagueId={selectedLeague.id} />
+              <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} leagueConfig={selectedLeague} leagueId={selectedLeague.id} isPro={isPro} isElite={isElite} onUpgrade={() => setShowUpgradeModal(true)} />
             </div>
           </div>
         );
@@ -4672,7 +4714,12 @@
                           : (l.tournament || "No tournament set")
                         }
                         {" · $" + (l.entryFee || 0)} entry
-                        {l.venmoUsername && (" · @" + l.venmoUsername)}
+                        {(l.paymentUsername || l.venmoUsername) && (() => {
+                          const plat = l.paymentPlatform || "venmo";
+                          const user = l.paymentUsername || l.venmoUsername;
+                          const labels = { venmo: "Venmo", cashapp: "Cash App", paypal: "PayPal", zelle: "Zelle" };
+                          return ` · ${labels[plat] || "Venmo"}: ${plat === "cashapp" ? "" : "@"}${user}`;
+                        })()}
                         <span style={{ marginLeft:8, padding:"2px 8px", borderRadius:4, fontSize:"10px", background:t.accentFaint, color:t.accentLight }}>{t.name}</span>
                         {l.leagueType === "season" && (
                           <span style={{ marginLeft:4, padding:"2px 8px", borderRadius:4, fontSize:"10px", background:"rgba(255,100,100,0.1)", color:"#ff6666" }}>SEASON</span>
@@ -4942,8 +4989,30 @@
                     <input style={S_DASH.input} value={leagueForm.customPayout} onChange={e => setLeagueForm({...leagueForm, customPayout: e.target.value})} placeholder="e.g. 45/25/15/10/5 (must add to 100)" />
                   )}
 
-                  <label style={S_DASH.label}>Your Venmo Username (for entry fee collection)</label>
-                  <input style={S_DASH.input} value={leagueForm.venmoUsername} onChange={e => setLeagueForm({...leagueForm, venmoUsername: e.target.value})} placeholder="@Your-Venmo" />
+                  <label style={S_DASH.label}>Payment Collection</label>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+                    {[
+                      { key: "venmo", label: "Venmo", color: "#008CFF", placeholder: "@YourVenmo" },
+                      { key: "cashapp", label: "Cash App", color: "#00D632", placeholder: "$YourCashTag" },
+                      { key: "paypal", label: "PayPal.me", color: "#0070BA", placeholder: "YourPayPalUsername" },
+                      { key: "zelle", label: "Zelle", color: "#6D1ED4", placeholder: "email or phone" },
+                    ].map(p => (
+                      <button key={p.key} onClick={() => setLeagueForm({...leagueForm, paymentPlatform: p.key})}
+                        style={{
+                          padding:"8px 12px", borderRadius:6, cursor:"pointer", fontSize:"12px", fontWeight:600, textAlign:"center",
+                          border: leagueForm.paymentPlatform === p.key ? `2px solid ${p.color}` : "1px solid rgba(255,255,255,0.1)",
+                          background: leagueForm.paymentPlatform === p.key ? `${p.color}15` : "transparent",
+                          color: leagueForm.paymentPlatform === p.key ? p.color : "rgba(255,255,255,0.4)",
+                        }}>{p.label}</button>
+                    ))}
+                  </div>
+                  <input style={S_DASH.input} value={leagueForm.paymentUsername || ""} onChange={e => setLeagueForm({...leagueForm, paymentUsername: e.target.value})}
+                    placeholder={
+                      leagueForm.paymentPlatform === "cashapp" ? "$YourCashTag" :
+                      leagueForm.paymentPlatform === "paypal" ? "YourPayPalUsername" :
+                      leagueForm.paymentPlatform === "zelle" ? "Email or phone number" :
+                      "@YourVenmo"
+                    } />
 
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
                     <div>
@@ -5201,7 +5270,7 @@
                       </div>
                     </div>
                   )}
-                  <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} leagueConfig={seasonLeagueConfig} leagueId={seasonLeagueId} />
+                  <GolfPool leagueTheme={selectedLeague.theme || "clubhouse"} leagueConfig={seasonLeagueConfig} leagueId={seasonLeagueId} isPro={isPro} isElite={isElite} onUpgrade={() => setShowUpgradeModal(true)} />
                 </div>
               )}
 
