@@ -1274,6 +1274,7 @@
           base.USE_TIERS = true;
         }
         if (LC.lockDate) base.LOCK_TIME = new Date(LC.lockDate).getTime();
+        if (LC.noRepeatPicks) base.NO_REPEAT_PICKS = true;
         if (LC.tournament) base.TARGET_TOURNAMENT = LC.tournament;
         // Use league-specific Firebase path for data isolation
         if (leagueId) {
@@ -1801,6 +1802,40 @@
           totalPicks += tierPicks[i].length;
         }
         if (totalPicks === 0) return setRErr("You need to make at least some picks.");
+
+        // No-repeat pick enforcement for season leagues
+        if (LCFG.NO_REPEAT_PICKS && leagueId && leagueId.includes("_t")) {
+          const allNewPicks = tierPicks.flat();
+          // Extract base league ID and current tournament index
+          const baseId = leagueId.replace(/_t\d+$/, "");
+          const currentIdx = parseInt(leagueId.match(/_t(\d+)$/)?.[1] || "0");
+          
+          // Check all previous tournaments for this player's picks
+          const usedPicks = new Set();
+          for (let i = 0; i < currentIdx; i++) {
+            try {
+              const prevPrefix = `pool-${baseId}_t${i}-`;
+              const snap = await fbDb.ref(`${prevPrefix}gp-teams-v5`).once("value");
+              const prevTeams = snap.val();
+              if (prevTeams) {
+                // Find this player's team by email
+                for (const [name, data] of Object.entries(prevTeams)) {
+                  if (data.email?.toLowerCase() === rEmail.trim().toLowerCase()) {
+                    (data.picks || []).forEach(p => usedPicks.add(p.toLowerCase()));
+                    break;
+                  }
+                }
+              }
+            } catch {}
+          }
+          
+          if (usedPicks.size > 0) {
+            const repeated = allNewPicks.filter(p => usedPicks.has(p.toLowerCase()));
+            if (repeated.length > 0) {
+              return setRErr(`No-repeat rule: You've already picked ${repeated.join(", ")} in a previous tournament. Choose different golfers.`);
+            }
+          }
+        }
     
         // Allow overwriting existing team (edit mode) — check email matches for non-admin edits
         const existing = teams[rName.trim()];
@@ -3029,12 +3064,21 @@
                   <p style={S.emptyMsg}>No field available yet. Check back closer to the tournament.</p>
                 ) : (
                   <>
+                    {/* Warn if ESPN tournament doesn't match season tournament */}
+                    {LCFG.TARGET_TOURNAMENT && tName && !tName.toLowerCase().includes(LCFG.TARGET_TOURNAMENT.toLowerCase().split(" ")[0]) && (
+                      <div style={{ padding: "10px 14px", background: "rgba(255,180,50,0.08)", border: "1px solid rgba(255,180,50,0.2)", borderRadius: 6, marginBottom: 12, fontSize: 12, color: "rgba(255,200,100,0.9)", textAlign: "center" }}>
+                        Note: The field below is from <strong>{tName}</strong> (currently live on ESPN). Your tournament is <strong>{LCFG.TARGET_TOURNAMENT}</strong>. The correct field will appear when that event goes live on ESPN.
+                      </div>
+                    )}
                     <p style={{
                       color: "rgba(200,184,106,0.85)", fontSize: 14,
                       marginBottom: 18, lineHeight: 1.7, textAlign: "center",
                     }}>
                       <strong style={{ color: "#d4c87a" }}>{targetTournament || tName || "Tournament"}</strong> — {registrationField.length} golfers.
-                      Pick {LCFG.PICKS} across {LCFG.TIERS.length} tiers.
+                      {LCFG.USE_TIERS !== false
+                        ? ` Pick ${LCFG.PICKS} across ${LCFG.TIERS.length} tiers.`
+                        : ` Pick any ${LCFG.PICKS} golfers.`
+                      }
                     </p>
     
                     {/* Edit existing team — email-gated */}
@@ -4470,6 +4514,7 @@
         perEventFee: 20, // portion that goes to each event's prize pool
         // F1-style points (index = position - 1)
         seasonPoints: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1],
+        pointsPreset: "standard",
       });
 
       const createLeague = async () => {
@@ -4520,7 +4565,7 @@
           sport: leagueData.sport, ownerId: user.uid, createdAt: Date.now(),
         });
         setShowCreateLeague(false);
-        setLeagueForm({ name: "", tournament: "", sport: "golf", entryFee: 20, adminFee: 0, payoutSplit: "60/30/10", customPayout: "", venmoUsername: "", paymentPlatform: "venmo", paymentUsername: "", maxPlayers: 20, lockDate: "", lockTime: "", tiers: "4", picksPerTeam: 10, bestOf: 5, theme: "clubhouse", logoUrl: "", leagueType: "single", seasonTournaments: [], seasonPreset: null, noRepeatPicks: true, maxTradesPerEvent: 0, seasonEntryFee: 50, perEventFee: 20, seasonPoints: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1] });
+        setLeagueForm({ name: "", tournament: "", sport: "golf", entryFee: 20, adminFee: 0, payoutSplit: "60/30/10", customPayout: "", venmoUsername: "", paymentPlatform: "venmo", paymentUsername: "", maxPlayers: 20, lockDate: "", lockTime: "", tiers: "4", picksPerTeam: 10, bestOf: 5, theme: "clubhouse", logoUrl: "", leagueType: "single", seasonTournaments: [], seasonPreset: null, noRepeatPicks: true, maxTradesPerEvent: 0, seasonEntryFee: 50, perEventFee: 20, seasonPoints: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1], pointsPreset: "standard" });
         loadLeagues();
       };
 
@@ -4955,14 +5000,30 @@
                             style={{ alignSelf:"flex-end", padding:"4px 8px", background:"none", border:"1px solid rgba(212,175,55,0.15)", borderRadius:4, color:"rgba(212,175,55,0.4)", cursor:"pointer", fontSize:14 }}>+</button>
                         </div>
                         <div style={{ display:"flex", gap:8, marginTop:8 }}>
-                          <button onClick={() => setLeagueForm({...leagueForm, seasonPoints: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]})}
-                            style={{ fontSize:10, padding:"4px 10px", background:"none", border:"1px solid rgba(212,175,55,0.15)", borderRadius:4, color:"rgba(212,175,55,0.5)", cursor:"pointer" }}>F1 Race</button>
-                          <button onClick={() => setLeagueForm({...leagueForm, seasonPoints: [8, 7, 6, 5, 4, 3, 2, 1]})}
-                            style={{ fontSize:10, padding:"4px 10px", background:"none", border:"1px solid rgba(212,175,55,0.15)", borderRadius:4, color:"rgba(212,175,55,0.5)", cursor:"pointer" }}>F1 Sprint</button>
-                          <button onClick={() => setLeagueForm({...leagueForm, seasonPoints: [10, 8, 6, 5, 4, 3, 2, 1]})}
-                            style={{ fontSize:10, padding:"4px 10px", background:"none", border:"1px solid rgba(212,175,55,0.15)", borderRadius:4, color:"rgba(212,175,55,0.5)", cursor:"pointer" }}>Top 8</button>
-                          <button onClick={() => setLeagueForm({...leagueForm, seasonPoints: [5, 3, 1]})}
-                            style={{ fontSize:10, padding:"4px 10px", background:"none", border:"1px solid rgba(212,175,55,0.15)", borderRadius:4, color:"rgba(212,175,55,0.5)", cursor:"pointer" }}>Podium Only</button>
+                          <button onClick={() => setLeagueForm({...leagueForm, seasonPoints: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1], pointsPreset: "standard"})}
+                            style={{ fontSize:10, padding:"4px 10px", borderRadius:4, cursor:"pointer",
+                              background: leagueForm.pointsPreset === "standard" ? "rgba(212,175,55,0.15)" : "none",
+                              border: leagueForm.pointsPreset === "standard" ? "1px solid rgba(212,175,55,0.4)" : "1px solid rgba(212,175,55,0.15)",
+                              color: leagueForm.pointsPreset === "standard" ? "#d4af37" : "rgba(212,175,55,0.5)",
+                            }}>Standard (Top 10)</button>
+                          <button onClick={() => setLeagueForm({...leagueForm, seasonPoints: [8, 7, 6, 5, 4, 3, 2, 1], pointsPreset: "compact"})}
+                            style={{ fontSize:10, padding:"4px 10px", borderRadius:4, cursor:"pointer",
+                              background: leagueForm.pointsPreset === "compact" ? "rgba(212,175,55,0.15)" : "none",
+                              border: leagueForm.pointsPreset === "compact" ? "1px solid rgba(212,175,55,0.4)" : "1px solid rgba(212,175,55,0.15)",
+                              color: leagueForm.pointsPreset === "compact" ? "#d4af37" : "rgba(212,175,55,0.5)",
+                            }}>Compact (Top 8)</button>
+                          <button onClick={() => setLeagueForm({...leagueForm, seasonPoints: [10, 8, 6, 5, 4, 3, 2, 1], pointsPreset: "weighted"})}
+                            style={{ fontSize:10, padding:"4px 10px", borderRadius:4, cursor:"pointer",
+                              background: leagueForm.pointsPreset === "weighted" ? "rgba(212,175,55,0.15)" : "none",
+                              border: leagueForm.pointsPreset === "weighted" ? "1px solid rgba(212,175,55,0.4)" : "1px solid rgba(212,175,55,0.15)",
+                              color: leagueForm.pointsPreset === "weighted" ? "#d4af37" : "rgba(212,175,55,0.5)",
+                            }}>Weighted (Top 8)</button>
+                          <button onClick={() => setLeagueForm({...leagueForm, seasonPoints: [5, 3, 1], pointsPreset: "podium"})}
+                            style={{ fontSize:10, padding:"4px 10px", borderRadius:4, cursor:"pointer",
+                              background: leagueForm.pointsPreset === "podium" ? "rgba(212,175,55,0.15)" : "none",
+                              border: leagueForm.pointsPreset === "podium" ? "1px solid rgba(212,175,55,0.4)" : "1px solid rgba(212,175,55,0.15)",
+                              color: leagueForm.pointsPreset === "podium" ? "#d4af37" : "rgba(212,175,55,0.5)",
+                            }}>Podium Only</button>
                         </div>
                       </div>
                     </div>
