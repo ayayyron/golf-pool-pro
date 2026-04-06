@@ -163,7 +163,7 @@
       ESPN: "https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard",
       ESPN_CORE: "https://sports.core.api.espn.com/v2/sports/golf/leagues/pga",
       ESPN_NEWS: "https://site.api.espn.com/apis/site/v2/sports/golf/pga/news",
-      OWGR_API: "https://api2.owgr.com/api/owgr/rankings/getRankings?pageSize=200&pageNumber=1",
+      OWGR_API: "/.netlify/functions/owgr-rankings",
       REFRESH_MS: 60000,
       ADMIN_PASS: "masters2026",
       // EmailJS config for registration notifications (free: emailjs.com)
@@ -1507,11 +1507,17 @@
           }
         } catch {}
     
-        // 2. Try OWGR API
+        // 2. Try OWGR API (via Netlify proxy to avoid CORS)
         try {
           const r = await fetch(CFG.OWGR_API);
           if (!r.ok) throw new Error("OWGR API failed");
           const j = await r.json();
+          // Proxy returns { rankings: {name: rank}, count: N }
+          if (j.rankings && typeof j.rankings === "object" && !Array.isArray(j.rankings)) {
+            console.log(`Using live OWGR rankings: ${j.count} players`);
+            return j.rankings;
+          }
+          // Direct API fallback (array format)
           const list = j.rankingsList || j.rankings || j.data || [];
           if (!list.length) throw new Error("Empty OWGR");
           const map = {};
@@ -1521,9 +1527,9 @@
             if (name && rank) map[norm(name)] = parseInt(rank);
           }
           return map;
-        } catch {
+        } catch (e) {
           // 3. Fall back to hardcoded OWGR rankings
-          console.log("Using fallback OWGR rankings");
+          console.log("OWGR fetch failed, using fallback:", e.message);
           return OWGR_FALLBACK;
         }
       }, []);
