@@ -1337,7 +1337,8 @@
       const [tierPicks, setTierPicks] = useState(LCFG.TIERS.map(() => []));
       const [rErr, setRErr] = useState("");
       const [editLookupEmail, setEditLookupEmail] = useState("");
-      const [editMatchedTeam, setEditMatchedTeam] = useState(null); // team name found by email
+      const [editMatchedTeam, setEditMatchedTeam] = useState(null);
+      const [editOriginalName, setEditOriginalName] = useState(null);
       const [rOk, setROk] = useState("");
       const [rTiebreaker, setRTiebreaker] = useState(""); // prediction of winning score
       const [searches, setSearches] = useState(LCFG.TIERS.map(() => ""));
@@ -1845,7 +1846,10 @@
     
         // Allow overwriting existing team (edit mode) — check email matches for non-admin edits
         const existing = teams[rName.trim()];
-        const isEdit = !!existing;
+        const isRename = editOriginalName && editOriginalName !== rName.trim();
+        const isEdit = !!existing || isRename;
+        
+        // If this exact name exists and belongs to someone else, block it
         if (existing && existing.email.toLowerCase() !== rEmail.trim().toLowerCase()) {
           return setRErr("That team name is already taken. Please choose a different name.");
         }
@@ -1859,9 +1863,18 @@
         tierPicks.forEach((picks, ti) => {
           picks.forEach(name => { tierMap[name] = ti; });
         });
-        const nt = { ...teams, [rName.trim()]: { email: rEmail.trim(), owner: ownerDisplay, picks: tierPicks.flat(), tierMap, tiebreaker: rTiebreaker.trim(), at: Date.now() } };
+        
+        // Build new teams object
+        const nt = { ...teams };
+        // If team was renamed, delete the old entry
+        if (isRename && nt[editOriginalName]) {
+          delete nt[editOriginalName];
+        }
+        nt[rName.trim()] = { email: rEmail.trim(), owner: ownerDisplay, picks: tierPicks.flat(), tierMap, tiebreaker: rTiebreaker.trim(), at: Date.now() };
         setTeams(nt);
         await saveS(SK.TEAMS, nt);
+        // Clear edit tracking
+        setEditOriginalName(null);
     
         // Build pick details
         const picks = tierPicks.flat();
@@ -3125,6 +3138,7 @@
                               </p>
                               <button onClick={() => {
                                 setRName(editMatchedTeam);
+                                setEditOriginalName(editMatchedTeam);
                                 setREmail(data.email || "");
                                 setROwner(data.owner || "");
                                 setRTiebreaker(data.tiebreaker || "");
