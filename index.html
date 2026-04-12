@@ -419,7 +419,7 @@
       SNAP: "gp-snap-v5",
     };
     
-    const SHARED_KEYS = new Set([SK.TEAMS, SK.ACES, "gp-owgr-v5", "gp-target-tournament", "gp-custom-field", "gp-picks-locked", "gp-lock-time", "gp-payments"]); // these go to Firebase
+    const SHARED_KEYS = new Set([SK.TEAMS, SK.ACES, SK.CARDS, "gp-owgr-v5", "gp-target-tournament", "gp-custom-field", "gp-picks-locked", "gp-lock-time", "gp-payments"]); // these go to Firebase
 
     
     // ── Storage: shared keys → Firebase, local keys → localStorage
@@ -769,9 +769,12 @@
                   today = toN(latestRd.displayValue);
                 }
               }
-            } else if (rounds.length > 0) {
-              // No hole data but have round scores
-              thru = "F";
+            } else if (rounds.length > 0 && rounds.some(r => r !== 0 && r != null)) {
+              // No hole data but have actual round scores
+              const lastRdVal = rounds[rounds.length - 1];
+              if (lastRdVal && lastRdVal > 50) {
+                thru = "F";
+              }
               const lastRd = c.linescores[c.linescores.length - 1];
               if (lastRd?.displayValue) today = toN(lastRd.displayValue);
             }
@@ -779,6 +782,27 @@
     
           // Fallback: try status.displayValue if it exists
           if (!thru && c.status?.displayValue) thru = c.status.displayValue;
+          
+          // Tee time fallback: search entire competitor JSON for tee time
+          // But NOT for cut/withdrawn players
+          if (status !== "cut" && status !== "wd" && (!thru || thru === "—" || thru === "")) {
+            const fullStr = JSON.stringify(c);
+            const teeMatch = fullStr.match(/"displayValue":"((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\w+\s+\d+\s+\d{1,2}:\d{2}[^"]*)"/);
+            if (teeMatch) {
+              const timeMatch = teeMatch[1].match(/(\d{1,2}):(\d{2})/);
+              if (timeMatch) {
+                let h = parseInt(timeMatch[1]);
+                const min = timeMatch[2];
+                const ampm = h >= 12 ? "PM" : "AM";
+                const h12 = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+                thru = `${h12}:${min} ${ampm}`;
+              }
+            }
+          }
+          // Force CUT/WD display for eliminated players
+          if ((status === "cut" || status === "wd") && (!thru || thru === "—" || thru === "")) {
+            thru = status === "cut" ? "CUT" : "WD";
+          }
           const amateur = !!(c.amateur);
     
           // Extract hole-by-hole scorecards from linescores
@@ -1021,8 +1045,14 @@
     
     // ── Team scoring ────────────────────────────────────────────
     function calcTeam(picks, scores, cutLine) {
-      const gs = picks.map(name => {
-        const s = scores[name];
+      if (!picks || !Array.isArray(picks)) return { golferScores: [], teamTotal: 0, bestPlayer: 0, todayTotal: 0 };
+      // Build normalized lookup for accent-insensitive matching (e.g., Åberg → aberg)
+      const normScores = {};
+      for (const [key, val] of Object.entries(scores || {})) {
+        normScores[norm(key)] = val;
+      }
+      const gs = picks.filter(name => name).map(name => {
+        const s = scores[name] || normScores[norm(name)];
         if (!s) return { name, toPar: 0, today: 0, thru: "—", status: "unknown", isCut: false, adj: 0 };
         const isCut = s.status === "cut" || s.status === "wd";
         let adj = s.toPar;
@@ -1030,7 +1060,7 @@
         return { name, toPar: s.toPar, today: s.today, thru: s.thru || "—", status: s.status, isCut, adj };
       });
       gs.sort((a, b) => a.adj - b.adj);
-      const counting = gs.slice(0, CFG.COUNT);
+      const counting = gs.slice(0, LCFG.COUNT);
       return {
         golferScores: gs,
         teamTotal: counting.reduce((s, g) => s + g.adj, 0),
@@ -1635,7 +1665,12 @@
             // Store scorecards from legacy hole-by-hole data
             if (Object.keys(p.scorecards).length > 0) {
               setScorecards(p.scorecards);
-              await saveS(SK.CARDS, p.scorecards);
+              // Sanitize keys for Firebase (dots not allowed)
+              const sanitized = {};
+              for (const [name, rdMap] of Object.entries(p.scorecards)) {
+                sanitized[name.replace(/\./g, "")] = rdMap;
+              }
+              try { await saveS(SK.CARDS, sanitized); } catch (e) { console.warn("Cards save failed:", e); }
               // Detect course pars from first golfer with 18 holes
               for (const [, rounds] of Object.entries(p.scorecards)) {
                 for (const [, holes] of Object.entries(rounds)) {
@@ -1645,6 +1680,28 @@
                   }
                 }
                 if (detectedPars) break;
+              }
+
+              // AUTO-DETECT ACES AND ALBATROSS
+              const detectedAces = [];
+              for (const [name, rdMap] of Object.entries(p.scorecards)) {
+                for (const holes of Object.values(rdMap)) {
+                  if (!Array.isArray(holes)) continue;
+                  for (const h of holes) {
+                    if (!h) continue;
+                    if (Number(h.strokes) === 1) { detectedAces.push(name); break; }
+                    if (Number(h.strokes) === 2 && Number(h.par) >= 5) { detectedAces.push(name); break; }
+                  }
+                }
+              }
+              if (detectedAces.length > 0) {
+                console.log("Auto-detected aces/albatross:", [...new Set(detectedAces)]);
+                const curAces = aces || [];
+                const merged = [...new Set([...curAces, ...detectedAces])];
+                if (merged.length > curAces.length) {
+                  setAces(merged);
+                  await saveS(SK.ACES, merged);
+                }
               }
             }
             await saveS(SK.CACHE, {
@@ -1690,28 +1747,28 @@
     
           // Store scorecards from ESPN hole-by-hole data
           if (Object.keys(p.scorecards).length > 0) {
-            // Convert from {name: {rd: [{hole,strokes,par,scoreType}]}} to our format
-            const cards = {};
+            setScorecards(p.scorecards);
+            const sanitized = {};
             for (const [name, rdMap] of Object.entries(p.scorecards)) {
-              cards[name] = {};
-              for (const [rd, holes] of Object.entries(rdMap)) {
-                cards[name][rd] = holes.map(h => h ? (h.strokes - h.par) : null);
-              }
+              sanitized[name.replace(/\./g, "")] = rdMap;
             }
-            setScorecards(cards);
-            await saveS(SK.CARDS, cards);
+            try { await saveS(SK.CARDS, sanitized); } catch (e) { console.warn("Cards save failed:", e); }
     
-            // Auto-detect aces from hole-by-hole
+            // Auto-detect aces and albatross from hole-by-hole
             const detectedAces = [];
             for (const [name, rdMap] of Object.entries(p.scorecards)) {
               for (const holes of Object.values(rdMap)) {
+                if (!Array.isArray(holes)) continue;
                 for (const h of holes) {
-                  if (h && h.strokes === 1) detectedAces.push(name);
+                  if (!h) continue;
+                  if (Number(h.strokes) === 1) { detectedAces.push(name); break; }
+                  if (Number(h.strokes) === 2 && Number(h.par) >= 5) { detectedAces.push(name); break; }
                 }
               }
             }
             if (detectedAces.length > 0) {
-              const curAces = await loadS(SK.ACES) || [];
+              console.log("Auto-detected aces/albatross:", [...new Set(detectedAces)]);
+              const curAces = aces || [];
               const merged = [...new Set([...curAces, ...detectedAces])];
               if (merged.length > curAces.length) {
                 setAces(merged);
@@ -2023,18 +2080,91 @@
     
       const lb = useMemo(() => {
         const allTeams = { ...teams };
-        // Inject admin test team if enabled
         if (showAdminTeam && adminTeamPicks?.length > 0) {
           allTeams["🔧 Admin Test Team"] = { picks: adminTeamPicks, email: "admin", owner: "Admin" };
         }
-        const entries = Object.entries(allTeams).map(([n, d]) => ({
-          name: n, picks: d.picks, owner: d.owner, ...calcTeam(d.picks, eff, effCut),
-        }));
+
+        // Step 1: Find low round winner(s) for each completed round
+        const lowRoundWinners = {};
+        const maxRound = Math.max(0, ...Object.values(eff).map(s => (s.rounds || []).length));
+        for (let ri = 0; ri < maxRound; ri++) {
+          const isCurrentRound = ri === maxRound - 1;
+          const isCompleted = ri < maxRound - 1 || (tStatus || "").toLowerCase().includes("final");
+          let minStrokes = Infinity;
+          let winners = [];
+          for (const [name, s] of Object.entries(eff)) {
+            if (isCurrentRound && !isCompleted && s.thru !== "F") continue;
+            const strokes = s.rounds?.[ri];
+            if (strokes && strokes > 50 && strokes < 100) {
+              if (strokes < minStrokes) { minStrokes = strokes; winners = [name]; }
+              else if (strokes === minStrokes) { winners.push(name); }
+            }
+          }
+          if (winners.length > 0 && minStrokes < 72) {
+            lowRoundWinners[ri] = winners;
+          }
+        }
+
+        // Step 2: Build team entries with bonuses
+        const entries = Object.entries(allTeams).map(([n, d]) => {
+          const picks = Array.isArray(d.picks) ? d.picks.filter(p => p) : (d.picks ? Object.values(d.picks).filter(p => p) : []);
+          const base = calcTeam(picks, eff, effCut);
+          let teamBonus = 0;
+          const teamBonusDetails = [];
+          const normPicks = picks.map(p => norm(p));
+
+          // Low round bonus: -1 per round (max 1 per team per round)
+          for (const [ri, lrWinners] of Object.entries(lowRoundWinners)) {
+            const hasWinner = lrWinners.some(w => picks.includes(w) || normPicks.includes(norm(w)));
+            if (hasWinner) {
+              teamBonus += LCFG.BONUSES.LOW_ROUND;
+              const winnerName = lrWinners.find(w => picks.includes(w) || normPicks.includes(norm(w)));
+              teamBonusDetails.push({ emoji: "⚡", label: `Low Round Rd ${Number(ri) + 1}: ${winnerName}`, bonus: LCFG.BONUSES.LOW_ROUND });
+            }
+          }
+
+          // Tournament winner bonus
+          const isFinal = (tStatus || "").toLowerCase().includes("final") || (tStatus || "").toLowerCase().includes("official");
+          if (isFinal) {
+            const winner = Object.entries(eff)
+              .filter(([, s]) => s.status === "active")
+              .sort((a, b) => a[1].toPar - b[1].toPar)[0];
+            if (winner && (picks.includes(winner[0]) || normPicks.includes(norm(winner[0])))) {
+              teamBonus += LCFG.BONUSES.TOURNAMENT_WINNER;
+              teamBonusDetails.push({ emoji: "🏆", label: `Tournament Winner: ${winner[0]}`, bonus: LCFG.BONUSES.TOURNAMENT_WINNER });
+            }
+          }
+
+          // Low amateur bonus
+          const amateurs = Object.entries(eff)
+            .filter(([, s]) => s.amateur && s.status === "active")
+            .sort((a, b) => a[1].toPar - b[1].toPar);
+          if (amateurs.length > 0 && (picks.includes(amateurs[0][0]) || normPicks.includes(norm(amateurs[0][0])))) {
+            teamBonus += LCFG.BONUSES.LOW_AMATEUR;
+            teamBonusDetails.push({ emoji: "🎓", label: `Low Amateur: ${amateurs[0][0]}`, bonus: LCFG.BONUSES.LOW_AMATEUR });
+          }
+
+          // Hole-in-one / albatross bonus
+          for (const ace of aces) {
+            if (picks.includes(ace) || normPicks.includes(norm(ace))) {
+              teamBonus += LCFG.BONUSES.HOLE_IN_ONE;
+              teamBonusDetails.push({ emoji: "🕳️", label: `Hole-in-One: ${ace}`, bonus: LCFG.BONUSES.HOLE_IN_ONE });
+            }
+          }
+
+          return {
+            name: n, picks, owner: d.owner,
+            ...base,
+            teamBonus,
+            teamBonusDetails,
+            teamTotal: base.teamTotal + teamBonus,
+          };
+        });
         entries.sort((a, b) =>
           a.teamTotal !== b.teamTotal ? a.teamTotal - b.teamTotal : a.bestPlayer - b.bestPlayer
         );
         return entries;
-      }, [teams, eff, effCut, showAdminTeam, adminTeamPicks]);
+      }, [teams, eff, effCut, showAdminTeam, adminTeamPicks, tStatus, aces]);
     
       // Registration uses custom field (for upcoming tournaments) or ESPN live field
       const registrationField = useMemo(() => {
@@ -2504,6 +2634,13 @@
                                   {t.owner}
                                 </span>
                               )}
+                              {t.teamBonusDetails?.length > 0 && (
+                                <span style={{ marginLeft: 6 }}>
+                                  {t.teamBonusDetails.map((f, i) => (
+                                    <span key={i} title={f.label} style={{ fontSize: 12, cursor: "help" }}>{f.emoji}</span>
+                                  ))}
+                                </span>
+                              )}
                               <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
                                 stroke="currentColor" strokeWidth="2.5"
                                 style={{
@@ -2519,8 +2656,13 @@
                               <span style={{ ...S.sc, width: 65, color: clr(t.todayTotal), fontSize: 17, fontWeight: 600 }}>
                                 {fmt(t.todayTotal)}
                               </span>
-                              <span style={{ ...S.sc, width: 65, color: clr(t.teamTotal), fontSize: 19, fontWeight: 700 }}>
+                              <span style={{ ...S.sc, width: 65, color: clr(t.teamTotal), fontSize: 19, fontWeight: 700, position: "relative" }}>
                                 {fmt(t.teamTotal)}
+                                {t.teamBonus !== 0 && (
+                                  <span style={{ position: "absolute", top: -2, right: -2, fontSize: 9, color: "#4c9", fontWeight: 600 }}>
+                                    {t.teamBonus > 0 ? `+${t.teamBonus}` : t.teamBonus}
+                                  </span>
+                                )}
                               </span>
                               </>
                             ) : (
@@ -2757,9 +2899,9 @@
                                               ))}
                                               <td style={{
                                                 textAlign: "center", fontSize: 12, fontWeight: 700, padding: "2px 3px",
-                                                color: outPlayed === 0 ? "rgba(200,184,106,0.15)" : "rgba(200,184,106,0.6)",
+                                                color: outPlayed < 9 ? "rgba(200,184,106,0.15)" : "rgba(200,184,106,0.6)",
                                               }}>
-                                                {outPlayed > 0 ? outStrokes : "·"}
+                                                {outPlayed >= 9 ? outStrokes : "·"}
                                               </td>
                                               {inHoles.map((v, i) => (
                                                 <td key={i} style={{ textAlign: "center", padding: "2px 0" }}>
@@ -2768,9 +2910,9 @@
                                               ))}
                                               <td style={{
                                                 textAlign: "center", fontSize: 12, fontWeight: 700, padding: "2px 3px",
-                                                color: inPlayed === 0 ? "rgba(200,184,106,0.15)" : "rgba(200,184,106,0.6)",
+                                                color: inPlayed < 9 ? "rgba(200,184,106,0.15)" : "rgba(200,184,106,0.6)",
                                               }}>
-                                                {inPlayed > 0 ? inStrokes : "·"}
+                                                {inPlayed >= 9 ? inStrokes : "·"}
                                               </td>
                                             </tr>
                                           </tbody>
@@ -2801,6 +2943,13 @@
                                   {fmt(t.teamTotal)}
                                 </span>
                               </div>
+                              {t.teamBonus !== 0 && (
+                                <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 0", fontSize: 10, color: "#4c9", flexWrap: "wrap", gap: 4 }}>
+                                  {t.teamBonusDetails?.map((f, i) => (
+                                    <span key={i}>{f.emoji} {f.label} ({f.bonus})</span>
+                                  ))}
+                                </div>
+                              )}
                               </>
                               )}
                             </div>
@@ -3819,7 +3968,7 @@
                     </div>
                   )}
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {allPicked.filter(g => !aces.includes(g)).slice(0, 20).map(g => (
+                    {allPicked.filter(g => !aces.includes(g)).map(g => (
                       <button key={g} onClick={async () => {
                         const u = [...aces, g];
                         setAces(u); await saveS(SK.ACES, u);
@@ -3831,6 +3980,25 @@
                         {g}
                       </button>
                     ))}
+                  </div>
+                  <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
+                    <input id="aceManualInput" type="text" placeholder="Or type golfer name..." style={{
+                      flex: 1, padding: "6px 8px", background: "rgba(0,0,0,0.2)",
+                      border: "1px solid rgba(200,184,106,0.1)", borderRadius: 3,
+                      color: "#d4c87a", fontSize: 12, fontFamily: "'Playfair Display',Georgia,serif",
+                    }} />
+                    <button onClick={async () => {
+                      const input = document.getElementById("aceManualInput");
+                      const name = input?.value?.trim();
+                      if (!name) return;
+                      const u = [...aces, name];
+                      setAces(u); await saveS(SK.ACES, u);
+                      if (input) input.value = "";
+                    }} style={{
+                      padding: "6px 12px", background: "rgba(200,184,106,0.08)",
+                      border: "1px solid rgba(200,184,106,0.15)", borderRadius: 3,
+                      color: "#d4c87a", cursor: "pointer", fontSize: 12,
+                    }}>Add</button>
                   </div>
                 </div>
     
