@@ -661,10 +661,17 @@
           if (!name) continue;
           const toPar = toN(c.score);
           let status = "active";
-          const st = (c.status?.type?.name || "").toLowerCase();
+          const st = (c.status?.type?.name || c.status?.type?.description || "").toLowerCase();
           if (st.includes("cut")) status = "cut";
           else if (st.includes("wd") || st.includes("withdraw")) status = "wd";
           else if (st.includes("dq")) status = "cut";
+          
+          // Detect cuts by round count: if tournament is in Rd 3/4 but player only has 2 rounds, they were cut
+          const tournRound = r.round || comp.status?.period || 1;
+          const playerRounds = (c.linescores || []).filter(rd => rd.value != null && rd.value > 0).length;
+          if (status === "active" && tournRound >= 3 && playerRounds > 0 && playerRounds < tournRound) {
+            status = "cut";
+          }
           // Thru: status object may be absent in legacy format
           // Derive from linescores instead
           let thru = "";
@@ -2089,7 +2096,7 @@
         const maxRound = Math.max(0, ...Object.values(eff).map(s => (s.rounds || []).length));
         for (let ri = 0; ri < maxRound; ri++) {
           const isCurrentRound = ri === maxRound - 1;
-          const isCompleted = ri < maxRound - 1 || (tStatus || "").toLowerCase().includes("final");
+          const isCompleted = ri < maxRound - 1 || (tStatus || "").toLowerCase().includes("final") || (tStatus || "").toLowerCase().includes("play complete") || (tStatus || "").toLowerCase().includes("official");
           let minStrokes = Infinity;
           let winners = [];
           for (const [name, s] of Object.entries(eff)) {
@@ -2124,7 +2131,7 @@
           }
 
           // Tournament winner bonus
-          const isFinal = (tStatus || "").toLowerCase().includes("final") || (tStatus || "").toLowerCase().includes("official");
+          const isFinal = (tStatus || "").toLowerCase().includes("final") || (tStatus || "").toLowerCase().includes("official") || (tStatus || "").toLowerCase().includes("play complete");
           if (isFinal) {
             const winner = Object.entries(eff)
               .filter(([, s]) => s.status === "active")
@@ -2252,7 +2259,7 @@
         };
     
         // Tournament winner: position 1 + status indicates final
-        const isFinal = (tStatus || "").toLowerCase().includes("final") || (tStatus || "").toLowerCase().includes("official");
+        const isFinal = (tStatus || "").toLowerCase().includes("final") || (tStatus || "").toLowerCase().includes("official") || (tStatus || "").toLowerCase().includes("play complete");
         if (isFinal) {
           const winner = Object.entries(eff)
             .filter(([, s]) => s.status === "active")
@@ -2281,7 +2288,7 @@
           // For past rounds, all golfers will have that round's score
           // Check if this round is complete: it's a past round if ri < maxRound - 1
           // or if the current round is "F" (finished) for leaders
-          const isCompletedRound = ri < maxRound - 1 || (tStatus || "").toLowerCase().includes("final");
+          const isCompletedRound = ri < maxRound - 1 || (tStatus || "").toLowerCase().includes("final") || (tStatus || "").toLowerCase().includes("play complete") || (tStatus || "").toLowerCase().includes("official");
           // For in-progress current round, only award if enough golfers have finished
           const finishedCount = Object.values(eff).filter(s => s.rounds?.[ri] > 0).length;
           const totalActive = Object.values(eff).filter(s => s.status === "active").length;
